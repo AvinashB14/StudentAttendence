@@ -1,0 +1,141 @@
+@model StudentAttendence.Models.LocationSetting
+@{
+    ViewBag.Title = "College Location Settings";
+}
+
+<div style="max-width: 650px; margin: 0 auto;">
+
+    <!-- Page Header -->
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <div style="display:inline-flex; align-items:center; justify-content:center;
+                    width:64px; height:64px; border-radius:18px; font-size:1.8rem; margin-bottom:1rem;
+                    background:linear-gradient(135deg,#f59e0b,#d97706);
+                    box-shadow:0 8px 24px rgba(245,158,11,.35); color:#fff;">
+            &#128205;
+        </div>
+        <h1 style="font-size:1.6rem; font-weight:800; margin-bottom:.4rem;
+                   background:linear-gradient(135deg,#fbbf24,#f59e0b);
+                   -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
+            College Location Settings
+        </h1>
+        <p style="color:#94a3b8; font-size:.9rem;">
+            Set your authorized college campus coordinates and allowed radius. Students can only mark attendance inside this zone.
+        </p>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success" style="margin-bottom: 1.5rem;">
+            &#10004; @TempData["SuccessMessage"]
+        </div>
+    }
+
+    <div class="card" style="padding: 1.8rem;">
+        <!-- Auto-fetch button -->
+        <div style="background: rgba(14,165,233,.08); border: 1px solid rgba(14,165,233,.25); border-radius: 12px; padding: 1.1rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div>
+                <div style="font-weight: 700; color: #38bdf8; font-size: .95rem;">&#127757; Use Current Location</div>
+                <div style="color: #94a3b8; font-size: .8rem; margin-top: .2rem;">Are you at the campus right now? Click to auto-fill latitude &amp; longitude.</div>
+            </div>
+            <button type="button" id="btnGetLocation" class="btn btn-secondary" style="padding: .5rem 1rem; font-size: .85rem;">
+                &#128205; Get My GPS Position
+            </button>
+        </div>
+
+        <div id="gpsStatus" style="display:none; font-size:.82rem; margin-bottom:1rem; padding:.6rem .9rem; border-radius:8px;"></div>
+
+        @using (Html.BeginForm("Location", "Settings", FormMethod.Post))
+        {
+            @Html.AntiForgeryToken()
+            @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+
+            <div class="form-group">
+                <label class="form-label">Campus / Classroom Name</label>
+                @Html.TextBoxFor(m => m.PlaceName, new { @class = "form-control", @placeholder = "e.g., Main Campus, CS Department, Hall A", @required = "required" })
+                @Html.ValidationMessageFor(m => m.PlaceName, "", new { @class = "text-danger" })
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Latitude</label>
+                    @Html.TextBoxFor(m => m.Latitude, new { @class = "form-control", @id = "txtLatitude", @type = "number", @step = "any", @placeholder = "e.g., 18.5204", @required = "required" })
+                    @Html.ValidationMessageFor(m => m.Latitude, "", new { @class = "text-danger" })
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Longitude</label>
+                    @Html.TextBoxFor(m => m.Longitude, new { @class = "form-control", @id = "txtLongitude", @type = "number", @step = "any", @placeholder = "e.g., 73.8567", @required = "required" })
+                    @Html.ValidationMessageFor(m => m.Longitude, "", new { @class = "text-danger" })
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Allowed Radius (in Metres)</label>
+                @Html.TextBoxFor(m => m.RadiusMeters, new { @class = "form-control", @type = "number", @min = "10", @max = "50000", @placeholder = "e.g., 200 (Default: 200m)", @required = "required" })
+                <small style="color: #64748b; font-size: .78rem; display: block; margin-top: .3rem;">
+                    Students must be within this distance (e.g. 200 meters) from the campus coordinates to mark attendance.
+                </small>
+                @Html.ValidationMessageFor(m => m.RadiusMeters, "", new { @class = "text-danger" })
+            </div>
+
+            <div style="margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: .85rem; font-size: 1rem;">
+                    &#128190; Save Location Settings
+                </button>
+            </div>
+        }
+    </div>
+
+    <!-- Quick Help & Google Maps guide -->
+    <div class="card" style="margin-top: 1.5rem; padding: 1.25rem; font-size: .85rem; color: #94a3b8; border-left: 4px solid #6c63ff;">
+        <div style="font-weight: 700; color: #e2e8f0; margin-bottom: .5rem; font-size: .92rem;">
+            &#128161; How to get your Latitude &amp; Longitude from Google Maps:
+        </div>
+        <ol style="margin-left: 1.2rem; line-height: 1.6;">
+            <li>Open <a href="https://maps.google.com" target="_blank" style="color: #38bdf8; text-decoration: underline;">Google Maps</a> on your phone or laptop.</li>
+            <li>Right-click (or tap and hold on phone) on your exact college building/room.</li>
+            <li>The first item shown in the popup menu is the <strong>Latitude and Longitude</strong> (e.g. <code>18.52043, 73.85674</code>).</li>
+            <li>Click or tap it to copy, then paste Latitude in the first box and Longitude in the second box.</li>
+        </ol>
+    </div>
+
+</div>
+
+@section scripts {
+<script>
+    document.getElementById('btnGetLocation').addEventListener('click', function () {
+        var statusEl = document.getElementById('gpsStatus');
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(245,158,11,.1)';
+        statusEl.style.color = '#f59e0b';
+        statusEl.style.border = '1px solid rgba(245,158,11,.3)';
+        statusEl.textContent = 'Fetching current device GPS location... Please allow permission.';
+
+        if (!navigator.geolocation) {
+            statusEl.style.background = 'rgba(239,68,68,.1)';
+            statusEl.style.color = '#ef4444';
+            statusEl.style.border = '1px solid rgba(239,68,68,.3)';
+            statusEl.textContent = 'Geolocation is not supported by your browser.';
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            function (pos) {
+                document.getElementById('txtLatitude').value = pos.coords.latitude.toFixed(6);
+                document.getElementById('txtLongitude').value = pos.coords.longitude.toFixed(6);
+                statusEl.style.background = 'rgba(34,197,94,.1)';
+                statusEl.style.color = '#22c55e';
+                statusEl.style.border = '1px solid rgba(34,197,94,.3)';
+                statusEl.textContent = 'GPS location captured successfully! (Accuracy: ±' + Math.round(pos.coords.accuracy) + ' meters)';
+            },
+            function (err) {
+                statusEl.style.background = 'rgba(239,68,68,.1)';
+                statusEl.style.color = '#ef4444';
+                statusEl.style.border = '1px solid rgba(239,68,68,.3)';
+                statusEl.textContent = 'Could not get location: ' + err.message + '. Please enter manually or check location permissions.';
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    });
+</script>
+}

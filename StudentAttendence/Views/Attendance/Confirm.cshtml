@@ -1,0 +1,88 @@
+@model StudentAttendence.Models.Student
+@{
+    ViewBag.Title = "Confirm Attendance";
+}
+
+<div class="card" style="max-width:520px; margin:0 auto;">
+    <div class="card-header">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:.5rem;">
+            <div style="width:42px;height:42px;border-radius:12px;
+                        background:linear-gradient(135deg,#22c55e,#16a34a);
+                        display:flex;align-items:center;justify-content:center;font-size:1.3rem;
+                        color:#fff; font-weight:700;">
+                &#10003;
+            </div>
+            <div>
+                <h2 class="card-title" style="font-size:1.35rem;">Confirm Attendance</h2>
+                <p class="card-subtitle">Verify details and mark present</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Info Card -->
+    <div style="background:#0f172a; border:1px solid rgba(34,197,94,.2); border-radius:12px;
+                padding:1.25rem 1.5rem; margin-bottom:1.5rem;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.85rem;font-size:.875rem;">
+            <div>
+                <div style="color:#64748b;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem;">Name</div>
+                <div style="font-weight:600;">@Model.FullName</div>
+            </div>
+            <div>
+                <div style="color:#64748b;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem;">Roll No</div>
+                <div><span class="badge badge-primary">@Model.PRN</span></div>
+            </div>
+            <div>
+                <div style="color:#64748b;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem;">Department</div>
+                <div>@Model.Department</div>
+            </div>
+            <div>
+                <div style="color:#64748b;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem;">Year</div>
+                <div>Year @Model.Year</div>
+            </div>
+            <div>
+                <div style="color:#64748b;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem;">Date</div>
+                <div style="color:#4ade80;font-weight:600;">@DateTime.Today.ToString("dd MMMM yyyy")</div>
+            </div>
+            <div>
+                <div style="color:#64748b;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem;">Status</div>
+                <div><span class="badge badge-success">Present</span></div>
+            </div>
+        </div>
+    </div>
+
+    @using (Html.BeginForm("Confirm", "Attendance", FormMethod.Post))
+    {
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="studentId" value="@Model.StudentId" />
+
+        <div class="form-group">
+            <label for="subjectId" style="font-weight:700;">Subject <span style="color:#ef4444;">*</span></label>
+            <select id="subjectId" name="subjectId" class="form-control" style="background:#0f0f1a;" required>
+                <option value="">-- Select Subject --</option>
+                @if (ViewBag.Subjects != null)
+                {
+                    foreach (var s in (List<StudentAttendence.Models.Subject>)ViewBag.Subjects)
+                    {
+                        <option value="@s.SubjectId">@s.SubjectName (@s.SubjectCode) — @s.LectureTime</option>
+                    }
+                }
+            </select>
+        </div>
+
+        <div style="display:flex;gap:.75rem;margin-top:1rem;">
+            <button type="submit" class="btn btn-success" id="confirmBtn">
+                &#10003; Confirm &amp; Mark Present
+            </button>
+            <a href="@Url.Action("Mark","Attendance")" class="btn btn-outline">&larr; Change Roll No</a>
+        </div>
+    }
+</div>
+
+@section scripts {
+<script>
+    document.querySelector('form').addEventListener('submit', function () {
+        var btn = document.getElementById('confirmBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = 'Marking...'; }
+    });
+</script>
+}

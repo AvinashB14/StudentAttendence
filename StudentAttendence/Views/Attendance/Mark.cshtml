@@ -1,0 +1,596 @@
+@{
+    ViewBag.Title = "Mark Attendance";
+    var faceApiJs    = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js";
+    var faceModelUrl = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/";
+}
+
+<!-- Anti-forgery token form (hidden — used by AJAX) -->
+@using (Html.BeginForm()) { @Html.AntiForgeryToken() }
+
+<div style="max-width:600px; margin:0 auto;">
+
+    <!-- Page header -->
+    <div style="text-align:center; margin-bottom:2rem;">
+        <div style="display:inline-flex; align-items:center; justify-content:center;
+                    width:64px; height:64px; border-radius:18px; font-size:1.8rem; margin-bottom:1rem;
+                    background:linear-gradient(135deg,#0ea5e9,#0284c7);
+                    box-shadow:0 8px 24px rgba(14,165,233,.4); color:#fff; font-weight:900;">
+            &#128247;
+        </div>
+        <h1 style="font-size:1.6rem; font-weight:800; margin-bottom:.4rem;
+                   background:linear-gradient(135deg,#38bdf8,#6c63ff);
+                   -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
+            Face Attendance
+        </h1>
+        <p style="color:#64748b; font-size:.9rem;">Look straight at the camera to mark your attendance</p>
+    </div>
+
+   
+    <!-- LOCATION CHECK BAR-->
+    
+    <div id="locationBar"
+         style="display:flex; align-items:center; justify-content:space-between; padding:.7rem 1.1rem;
+                background:#16213e; border:1px solid rgba(14,165,233,.2);
+                border-radius:12px; margin-bottom:.75rem; font-size:.82rem; color:#94a3b8;">
+        <div style="display:flex; align-items:center; gap:8px;">
+            <span id="locDot" style="width:10px;height:10px;border-radius:50%;background:#f59e0b;flex-shrink:0;"></span>
+            <span id="locText">&#128205; Checking GPS location&hellip;</span>
+        </div>
+        <button id="btnRetryLoc" type="button" class="btn btn-outline" style="display:none; padding:3px 10px; font-size:.75rem;">
+            Retry GPS
+        </button>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- STATUS BAR                                                  -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div id="statusBar"
+         style="display:flex; align-items:center; gap:10px; padding:.7rem 1.1rem;
+                background:#1a1a2e; border:1px solid rgba(255,255,255,.08);
+                border-radius:12px; margin-bottom:1rem; font-size:.83rem; color:#94a3b8;">
+        <span id="statusDot"
+              style="width:10px;height:10px;border-radius:50%;background:#f59e0b;
+                     flex-shrink:0; display:inline-block;"></span>
+        <span id="statusText">Loading face detection models&hellip;</span>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- CAMERA CARD                                                  -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="card" style="padding:1.25rem;">
+
+        <!-- Video + overlay -->
+        <div id="videoWrap"
+             style="position:relative; border-radius:14px; overflow:hidden;
+                    border:2px solid rgba(255,255,255,.08); background:#000;
+                    aspect-ratio:4/3; margin-bottom:1rem;">
+            <video id="webcamVideo" autoplay muted playsinline
+                   style="width:100%; height:100%; object-fit:cover; display:block;"></video>
+            <canvas id="overlayCanvas"
+                    style="position:absolute; top:0; left:0; width:100%; height:100%;"></canvas>
+
+            <!-- Scanning animation overlay (shown when processing) -->
+            <div id="scanOverlay"
+                 style="display:none; position:absolute; inset:0;
+                        background:rgba(14,165,233,.08);
+                        display:none; align-items:center; justify-content:center;">
+                <div style="text-align:center; color:#38bdf8;">
+                    <div id="scanSpinner"
+                         style="width:60px;height:60px;border-radius:50%;
+                                border:3px solid rgba(56,189,248,.3);
+                                border-top-color:#38bdf8;
+                                animation:spin 1s linear infinite; margin:0 auto 1rem;"></div>
+                    <div style="font-weight:600; font-size:.9rem;">Verifying identity&hellip;</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Automatic scanner info badge -->
+        <div id="autoScanInfo"
+             style="display:flex; align-items:center; justify-content:center; gap:8px;
+                    padding:.85rem; border-radius:12px; background:rgba(14,165,233,.1);
+                    border:1px solid rgba(14,165,233,.25); color:#38bdf8; font-weight:600; font-size:.92rem; text-align:center;">
+            <span id="autoScanIcon">&#9889;</span>
+            <span id="autoScanMsg">Position your face in front of the camera</span>
+        </div>
+
+        <p style="text-align:center;color:#64748b;font-size:.78rem;margin-top:.75rem;">
+            @DateTime.Now.ToString("dddd, dd MMMM yyyy")
+        </p>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- RESULT CARD  (hidden until scan completes)                  -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div id="resultCard" style="display:none; margin-top:1.25rem;"></div>
+
+    <!-- Scan again button (shown after any result) -->
+    <div id="scanAgainWrap" style="display:none; text-align:center; margin-top:1rem;">
+        <button id="scanAgainBtn" type="button" class="btn btn-outline">
+            &#8635; Scan Another Student
+        </button>
+    </div>
+
+</div>
+
+@section scripts {
+<script src="@faceApiJs"></script>
+<script>
+(function () {
+    var MODEL_URL        = '@faceModelUrl';
+    var DETECT_MS        = 200;
+    var MARK_URL         = '@Url.Action("ScanAndMark","Attendance")';
+    var MARK_SUBJECT_URL = '@Url.Action("MarkAttendanceForSubject","Attendance")';
+    var csrfToken        = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+
+    /* DOM */
+    var video        = document.getElementById('webcamVideo');
+    var overlay      = document.getElementById('overlayCanvas');
+    var autoScanInfo = document.getElementById('autoScanInfo');
+    var autoScanIcon = document.getElementById('autoScanIcon');
+    var autoScanMsg  = document.getElementById('autoScanMsg');
+    var statusDot    = document.getElementById('statusDot');
+    var statusText   = document.getElementById('statusText');
+    var resultCard   = document.getElementById('resultCard');
+    var scanAgain    = document.getElementById('scanAgainWrap');
+    var scanOver     = document.getElementById('scanOverlay');
+    var locDot       = document.getElementById('locDot');
+    var locText      = document.getElementById('locText');
+    var btnRetryLoc  = document.getElementById('btnRetryLoc');
+
+    var currentDesc   = null;
+    var detectTimer   = null;
+    var frozen        = false;
+    var userLat       = null;
+    var userLon       = null;
+    var locReady      = false;
+    var stableFrames  = 0;
+    var REQUIRED_STABLE_FRAMES = 3; // ~600ms of stable face detection before auto-marking
+
+    /* ── Geolocation Handling ─────────────────────────────────── */
+    function setLocStatus(txt, color, showRetry) {
+        locText.innerHTML = txt;
+        locDot.style.background = color || '#94a3b8';
+        btnRetryLoc.style.display = showRetry ? 'inline-block' : 'none';
+    }
+
+    function checkLocation() {
+        setLocStatus('&#128205; Acquiring GPS coordinates\u2026', '#f59e0b', false);
+        if (!navigator.geolocation) {
+            setLocStatus('&#9888; Geolocation not supported by browser', '#ef4444', true);
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            function (pos) {
+                userLat = pos.coords.latitude;
+                userLon = pos.coords.longitude;
+                locReady = true;
+                setLocStatus('&#10004; GPS Acquired (\u00b1' + Math.round(pos.coords.accuracy) + 'm)', '#22c55e', false);
+            },
+            function (err) {
+                locReady = false;
+                setLocStatus('&#9888; Location error: ' + err.message + ' (Please allow GPS)', '#ef4444', true);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+        );
+    }
+
+    btnRetryLoc.addEventListener('click', checkLocation);
+
+    /* ── Status helpers ───────────────────────────────────────── */
+    function setStatus(txt, color) {
+        statusText.textContent = txt;
+        statusDot.style.background = color || '#94a3b8';
+    }
+
+    function setAutoInfo(txt, icon, bg, borderColor, textColor) {
+        if (autoScanMsg) autoScanMsg.textContent = txt;
+        if (autoScanIcon) autoScanIcon.innerHTML = icon || '&#9889;';
+        if (autoScanInfo) {
+            autoScanInfo.style.background = bg || 'rgba(14,165,233,.1)';
+            autoScanInfo.style.borderColor = borderColor || 'rgba(14,165,233,.25)';
+            autoScanInfo.style.color = textColor || '#38bdf8';
+        }
+    }
+
+    /* ── Init ─────────────────────────────────────────────────── */
+    async function init() {
+        checkLocation();
+        try {
+            setStatus('Loading face detection models\u2026', '#f59e0b');
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+            setStatus('Models ready \u2014 starting camera\u2026', '#f59e0b');
+            await startCamera();
+        } catch (err) {
+            setStatus('Error: ' + err.message, '#ef4444');
+        }
+    }
+
+    async function startCamera() {
+        try {
+            var stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+            });
+            video.srcObject = stream;
+        } catch (e) {
+            setStatus('Camera access denied. Please allow camera permission.', '#ef4444');
+        }
+    }
+
+    /* ── Start detection once video plays ────────────────────── */
+    video.addEventListener('play', function () {
+        overlay.width  = video.videoWidth  || 640;
+        overlay.height = video.videoHeight || 480;
+        setStatus('Camera active \u2014 look straight into camera', '#6c63ff');
+        setAutoInfo('Looking for face... Please look straight into camera', '&#128065;', 'rgba(14,165,233,.1)', 'rgba(14,165,233,.25)', '#38bdf8');
+        detectTimer = setInterval(detectFace, DETECT_MS);
+    });
+
+    /* ── Real-time detection loop ─────────────────────────────── */
+    async function detectFace() {
+        if (frozen) return;
+        var ctx = overlay.getContext('2d');
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+        try {
+            var result = await faceapi
+                .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            if (result) {
+                currentDesc = result.descriptor;
+                var box = result.detection.box;
+                var sx = overlay.width  / video.videoWidth;
+                var sy = overlay.height / video.videoHeight;
+                var x = box.x*sx, y = box.y*sy, w = box.width*sx, h = box.height*sy;
+
+                /* Glowing green box */
+                ctx.shadowColor = '#22c55e'; ctx.shadowBlur = 14;
+                ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 3;
+                ctx.strokeRect(x, y, w, h);
+
+                /* Corner marks */
+                var L = 20;
+                ctx.shadowBlur = 0; ctx.lineWidth = 4;
+                [[x,y,x+L,y,x,y+L],[x+w,y,x+w-L,y,x+w,y+L],
+                 [x,y+h,x+L,y+h,x,y+h-L],[x+w,y+h,x+w-L,y+h,x+w,y+h-L]]
+                .forEach(function(c){
+                    ctx.beginPath(); ctx.moveTo(c[0],c[1]);
+                    ctx.lineTo(c[2],c[3]); ctx.moveTo(c[0],c[1]); ctx.lineTo(c[4],c[5]);
+                    ctx.stroke();
+                });
+
+                var conf = Math.round(result.detection.score * 100);
+                stableFrames++;
+
+                if (stableFrames >= REQUIRED_STABLE_FRAMES) {
+                    setStatus('Face captured (' + conf + '%) \u2014 \u2026', '#22c55e');
+                    setAutoInfo('Face verified!', '&#10004;', 'rgba(34,197,94,.15)', 'rgba(34,197,94,.4)', '#4ade80');
+                    autoMarkAttendance();
+                } else {
+                    setStatus('Face detected (' + conf + '%) \u2014 hold still\u2026', '#22c55e');
+                    setAutoInfo('Hold still... capturing face (' + stableFrames + '/' + REQUIRED_STABLE_FRAMES + ')', '&#9203;', 'rgba(245,158,11,.15)', 'rgba(245,158,11,.4)', '#fbbf24');
+                }
+            } else {
+                currentDesc = null;
+                stableFrames = 0;
+                setStatus('No face detected \u2014 look straight at the camera', '#f59e0b');
+                setAutoInfo('Position your face in front of the camera', '&#128065;', 'rgba(14,165,233,.1)', 'rgba(14,165,233,.25)', '#38bdf8');
+            }
+        } catch (e) { /* skip transient frame errors */ }
+    }
+
+    /* ── Automatic Attendance Submission ──────────────────────── */
+    function autoMarkAttendance() {
+        if (!currentDesc || frozen) return;
+
+        /* Freeze camera and stop loop */
+        frozen = true;
+        clearInterval(detectTimer);
+        scanOver.style.display = 'flex';
+        setStatus('Verifying identity & location\u2026', '#6c63ff');
+        resultCard.style.display = 'none';
+        scanAgain.style.display  = 'none';
+
+        /* Turn off camera stream */
+        if (video.srcObject) {
+            video.srcObject.getTracks().forEach(function (track) {
+                track.stop();
+            });
+            video.srcObject = null;
+        }
+
+        var descJson = JSON.stringify(Array.from(currentDesc));
+
+        var formData = new FormData();
+        formData.append('__RequestVerificationToken', csrfToken);
+        formData.append('faceDescriptor', descJson);
+        if (userLat !== null && userLon !== null) {
+            formData.append('latitude', userLat);
+            formData.append('longitude', userLon);
+        }
+
+        fetch(MARK_URL, { method: 'POST', body: formData })
+            .then(function (r) {
+                if (!r.ok) throw new Error('Server error: ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                scanOver.style.display = 'none';
+                showResult(data);
+            })
+            .catch(function (err) {
+                scanOver.style.display = 'none';
+                showResult({ success: false, error: 'Request failed: ' + err.message });
+                setTimeout(resumeScan, 2500);
+            });
+    }
+
+    /* ── Show result card ─────────────────────────────────────── */
+    function showResult(data) {
+        var html = '';
+
+        if (data.success && data.faceVerified) {
+            /* ✅ FACE VERIFIED -> SELECT SUBJECT STEP */
+            var photoHtml = data.photo
+                ? '<img src="data:image/jpeg;base64,' + data.photo + '" alt="Student" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid rgba(14,165,233,.5);flex-shrink:0;">'
+                : '<div style="width:72px;height:72px;border-radius:50%;background:rgba(14,165,233,.15);display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0;">&#128100;</div>';
+
+            var subjects = data.subjects || [];
+            var optionsHtml = '<option value="">-- Choose Subject to Mark Attendance --</option>';
+            for (var i = 0; i < subjects.length; i++) {
+                var s = subjects[i];
+                optionsHtml += '<option value="' + s.subjectId + '" data-time="' + (s.lectureTime || '') + '">'
+                             + s.subjectName + ' (' + s.subjectCode + ') - ' + (s.lectureTime || 'No Time')
+                             + '</option>';
+            }
+
+            html = '<div style="background:var(--surface);border:1px solid rgba(14,165,233,.35);'
+                 + 'border-left:5px solid #0ea5e9;border-radius:14px;padding:1.4rem 1.6rem;box-shadow:0 8px 30px rgba(0,0,0,.4);">'
+                 + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:1.1rem;">'
+                 + photoHtml
+                 + '<div><div style="font-size:1.2rem;font-weight:800;color:#38bdf8;">&#10004; Face Verified!</div>'
+                 + '<div style="color:#94a3b8;font-size:.82rem;margin-top:.2rem;">Identity confirmed. Select your subject below to mark attendance.</div></div></div>'
+                 + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;font-size:.875rem;margin-bottom:1.25rem;background:var(--surface2);padding:1rem;border-radius:10px;">'
+                 + infoRow('Student Name', data.studentName, '#e2e8f0')
+                 + infoRow('Roll No', '<span class="badge badge-primary">' + data.prn + '</span>', '')
+                 + infoRow('Department', data.department, '#94a3b8')
+                 + infoRow('Year', 'Year ' + data.year, '#94a3b8')
+                 + '</div>'
+                 + (subjects.length === 0
+                     ? '<div class="alert alert-warning" style="margin-bottom:0;">&#9888; No subjects found in the database. Please add subjects first from Home page.</div>'
+                     : '<form id="markSubjectForm" onsubmit="event.preventDefault(); submitSubjectAttendance(' + data.studentId + ');">'
+                       + '<div class="form-group" style="margin-bottom:1rem;">'
+                       + '<label for="selectedSubjectId" style="font-weight:700;color:#fff;display:flex;align-items:center;gap:6px;">'
+                       + '&#128218; Select Subject <span style="color:#ef4444;">*</span></label>'
+                       + '<select id="selectedSubjectId" class="form-control" style="background:#0f0f1a;font-size:0.95rem;padding:.75rem;" required onchange="onSubjectChange(this)">'
+                       + optionsHtml
+                       + '</select>'
+                       + '</div>'
+                       + '<div id="selectedSubjectTimingInfo" style="display:none;background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.3);border-radius:8px;padding:.65rem .9rem;font-size:.82rem;color:#c4b5fd;margin-bottom:1rem;">'
+                       + '&#128337; <strong>Scheduled Lecture Time:</strong> <span id="subjectTimeSpan"></span>'
+                       + '</div>'
+                       + '<div id="subjectTimingAlert" style="display:none;margin-bottom:1rem;"></div>'
+                       + '<button type="submit" id="btnSubmitSubject" class="btn btn-primary" style="width:100%;padding:1rem;font-weight:700;font-size:1rem;justify-content:center;display:flex;align-items:center;gap:8px;">'
+                       + '&#10004; Mark Attendance For This Subject'
+                       + '</button>'
+                       + '</form>'
+                   )
+                 + '</div>';
+
+        } else if (data.success) {
+            /* ✅ FINAL SUCCESS (Recorded for subject) */
+            var photoHtml = data.photo
+                ? '<img src="data:image/jpeg;base64,' + data.photo + '" alt="Student" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid rgba(34,197,94,.5);flex-shrink:0;">'
+                : '<div style="width:72px;height:72px;border-radius:50%;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0;">&#128100;</div>';
+
+            html = '<div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.35);'
+                 + 'border-left:5px solid #22c55e;border-radius:14px;padding:1.4rem 1.6rem;">'
+                 + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:1.1rem;">'
+                 + photoHtml
+                 + '<div><div style="font-size:1.2rem;font-weight:800;color:#4ade80;">&#10003; Attendance Marked!</div>'
+                 + '<div style="color:#86efac;font-size:.8rem;margin-top:.2rem;">' + (data.message || 'Successfully recorded') + '</div></div></div>'
+                 + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;font-size:.875rem;">'
+                 + infoRow('Student Name', data.studentName, '#e2e8f0')
+                 + infoRow('Roll No', '<span class="badge badge-primary">' + data.prn + '</span>', '')
+                 + infoRow('Department', data.department, '#94a3b8')
+                 + infoRow('Subject', '<span class="badge badge-success">' + (data.subject || 'N/A') + '</span>', '')
+                 + infoRow('Lecture Timing', data.lectureTime || 'N/A', '#38bdf8')
+                 + infoRow('Marked At', data.time, '#4ade80')
+                 + '</div></div>';
+
+        } else if (data.alreadyMarked) {
+            /* ⚠️ ALREADY MARKED */
+            var photoHtml = data.photo
+                ? '<img src="data:image/jpeg;base64,' + data.photo + '" alt="Student" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid rgba(245,158,11,.5);flex-shrink:0;">'
+                : '<div style="width:72px;height:72px;border-radius:50%;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0;">&#128100;</div>';
+
+            html = '<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);'
+                 + 'border-left:5px solid #f59e0b;border-radius:14px;padding:1.4rem 1.6rem;">'
+                 + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:1.1rem;">'
+                 + photoHtml
+                 + '<div><div style="font-size:1.1rem;font-weight:800;color:#fbbf24;">&#9888; Already Marked</div>'
+                 + '<div style="color:#fde68a;font-size:.8rem;margin-top:.2rem;">' + (data.message || 'Attendance already recorded for this lecture today') + '</div></div></div>'
+                 + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;font-size:.875rem;">'
+                 + infoRow('Student Name', data.studentName, '#e2e8f0')
+                 + infoRow('Roll No', '<span class="badge badge-primary">' + data.prn + '</span>', '')
+                 + infoRow('Department', data.department, '#94a3b8')
+                 + infoRow('Subject', data.subject || 'N/A', '#fbbf24')
+                 + infoRow('Date', data.date, '#fbbf24')
+                 + infoRow('Marked At', data.markedAt, '#fbbf24')
+                 + '</div>'
+                 + '</div>';
+
+        } else if (data.outOfLocation) {
+            /* 🚫 OUT OF LOCATION */
+            html = '<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.4);'
+                 + 'border-left:5px solid #ef4444;border-radius:14px;padding:1.4rem 1.6rem;">'
+                 + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:.85rem;">'
+                 + '<div style="width:52px;height:52px;border-radius:50%;background:rgba(239,68,68,.2);display:flex;align-items:center;justify-content:center;font-size:1.6rem;color:#f87171;flex-shrink:0;">&#128683;</div>'
+                 + '<div><div style="font-size:1.15rem;font-weight:800;color:#f87171;">You Are Out of the Location!</div>'
+                 + '<div style="color:#fca5a5;font-size:.82rem;margin-top:.2rem;">Attendance can only be marked inside the college campus</div></div></div>'
+                 + '<div style="background:rgba(0,0,0,.25);border-radius:10px;padding:.9rem 1.1rem;font-size:.85rem;color:#e2e8f0;line-height:1.6;">'
+                 + (data.campus ? ('<div>&#127979; <strong>Authorized Zone:</strong> ' + data.campus + ' (within ' + data.allowedRadius + ' meters)</div>') : '')
+                 + (data.distance ? ('<div style="margin-top:.3rem;color:#f87171;">&#128207; <strong>Your Distance:</strong> ~' + data.distance + ' meters away</div>') : '')
+                 + '<div style="margin-top:.5rem;font-size:.8rem;color:#94a3b8;">' + (data.error || 'You must be physically present at the campus.') + '</div>'
+                 + '</div>'
+                 + '<div style="margin-top:.85rem;font-size:.78rem;color:#94a3b8;">Please make sure you are inside the classroom/campus and your device GPS is turned on with high accuracy.</div>'
+                 + '</div>';
+
+        } else if (data.notFound) {
+            /* ❌ NOT FOUND */
+            html = '<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);'
+                 + 'border-left:5px solid #ef4444;border-radius:14px;padding:1.4rem 1.6rem;">'
+                 + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:.75rem;">'
+                 + '<div style="width:52px;height:52px;border-radius:50%;background:rgba(239,68,68,.15);display:flex;align-items:center;justify-content:center;font-size:1.5rem;">&#10007;</div>'
+                 + '<div><div style="font-size:1rem;font-weight:800;color:#f87171;">Face Not Recognised</div>'
+                 + '<div style="color:#fca5a5;font-size:.8rem;margin-top:.2rem;">This face does not match any registered student</div></div></div>'
+                 + '<div style="color:#fca5a5;font-size:.83rem;">' + (data.error || '') + '</div>'
+                 + '<div style="margin-top:.9rem;font-size:.8rem;color:#94a3b8;">Please <a href="@Url.Action("Register","Student")" style="color:#6c63ff;">register first</a> if you are a new student.</div>'
+                 + '</div>';
+
+        } else {
+            /* Generic error or Timing error */
+            var isTiming = data.timingError;
+            var alertBg = isTiming ? 'rgba(239,68,68,.15)' : 'rgba(239,68,68,.12)';
+            var alertBorder = '#ef4444';
+            var icon = isTiming ? '&#9200;' : '&#10007;';
+            var title = isTiming ? (data.isEarly ? 'Lecture Not Started Yet' : (data.isLate ? 'Lecture Has Ended' : 'Lecture Timing Restriction')) : 'Attendance Error';
+
+            html = '<div style="background:' + alertBg + ';border:1px solid ' + alertBorder + ';border-left:5px solid #ef4444;border-radius:14px;padding:1.4rem 1.6rem;">'
+                 + '<div style="display:flex;align-items:flex-start;gap:12px;">'
+                 + '<div style="font-size:1.6rem;line-height:1;">' + icon + '</div>'
+                 + '<div><div style="font-size:1.1rem;font-weight:800;color:#f87171;margin-bottom:.3rem;">' + title + '</div>'
+                 + '<div style="color:#fca5a5;font-size:.9rem;line-height:1.5;">' + (data.message || data.error || 'An error occurred.') + '</div>'
+                 + '</div></div></div>';
+        }
+
+        resultCard.innerHTML = html;
+        resultCard.style.display = 'block';
+        resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        scanAgain.style.display = 'block';
+    }
+
+    /* ── Subject selection change helper ──────────────────────── */
+    window.onSubjectChange = function (sel) {
+        var timingInfo = document.getElementById('selectedSubjectTimingInfo');
+        var timingSpan = document.getElementById('subjectTimeSpan');
+        var timingAlert = document.getElementById('subjectTimingAlert');
+        if (timingAlert) timingAlert.style.display = 'none';
+
+        var opt = sel.options[sel.selectedIndex];
+        if (opt && opt.value) {
+            var timing = opt.getAttribute('data-time');
+            if (timing) {
+                timingSpan.innerText = timing;
+                timingInfo.style.display = 'block';
+            } else {
+                timingInfo.style.display = 'none';
+            }
+        } else {
+            timingInfo.style.display = 'none';
+        }
+    };
+
+    /* ── Submit Subject Attendance (checks time and marks) ──────── */
+    window.submitSubjectAttendance = function (studentId) {
+        var sel = document.getElementById('selectedSubjectId');
+        if (!sel || !sel.value) {
+            alert('Please select a subject from the list.');
+            return;
+        }
+
+        var subjectId = parseInt(sel.value, 10);
+        var btn = document.getElementById('btnSubmitSubject');
+        var timingAlert = document.getElementById('subjectTimingAlert');
+        if (timingAlert) { timingAlert.style.display = 'none'; timingAlert.innerHTML = ''; }
+
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '&#9203; Validating Lecture Timing & Marking...';
+        }
+
+        var formData = new FormData();
+        formData.append('__RequestVerificationToken', csrfToken);
+        formData.append('studentId', studentId);
+        formData.append('subjectId', subjectId);
+
+        fetch(MARK_SUBJECT_URL, {
+            method: 'POST',
+            body: formData
+        })
+        .then(function (r) {
+            if (!r.ok) throw new Error('Server error: ' + r.status);
+            return r.json();
+        })
+        .then(function (res) {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '&#10004; Mark Attendance For This Subject';
+            }
+
+            if (res.success) {
+                showResult(res);
+            } else if (res.timingError) {
+                /* Display prominent timing message directly in the form */
+                if (timingAlert) {
+                    var title = res.isEarly ? '&#9200; Lecture Has Not Started' : (res.isLate ? '&#9200; Lecture Has Ended' : '&#9888; Timing Issue');
+                    timingAlert.innerHTML = '<div style="background:rgba(239,68,68,.15);border:1px solid #ef4444;border-left:4px solid #ef4444;border-radius:10px;padding:1rem;color:#fca5a5;font-size:.875rem;">'
+                                          + '<div style="font-weight:700;color:#f87171;margin-bottom:.3rem;font-size:.95rem;">' + title + '</div>'
+                                          + '<div>' + res.message + '</div>'
+                                          + '</div>';
+                    timingAlert.style.display = 'block';
+                    timingAlert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    showResult(res);
+                }
+            } else {
+                showResult(res);
+            }
+        })
+        .catch(function (err) {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '&#10004; Mark Attendance For This Subject';
+            }
+            alert('Request error: ' + err.message);
+        });
+    };
+
+    function infoRow(label, value, color) {
+        return '<div><div style="color:#64748b;font-size:.72rem;text-transform:uppercase;'
+             + 'letter-spacing:.05em;margin-bottom:.2rem;">' + label + '</div>'
+             + '<div style="font-weight:600;' + (color ? 'color:' + color + ';' : '') + '">' + value + '</div></div>';
+    }
+
+    /* ── Resume scanning ──────────────────────────────────────── */
+    async function resumeScan() {
+        frozen = false;
+        currentDesc = null;
+        stableFrames = 0;
+        setStatus('Restarting camera\u2026', '#f59e0b');
+        setAutoInfo('Starting camera... Please wait', '&#128065;', 'rgba(14,165,233,.1)', 'rgba(14,165,233,.25)', '#38bdf8');
+        await startCamera();
+        detectTimer = setInterval(detectFace, DETECT_MS);
+    }
+
+    document.getElementById('scanAgainBtn').addEventListener('click', function () {
+        resultCard.style.display = 'none';
+        scanAgain.style.display  = 'none';
+        resumeScan();
+    });
+
+    /* ── Kick off*/
+    init();
+
+    /* ── Spin keyframe  */
+    var style = document.createElement('style');
+    style.textContent = '@@keyframes spin { to { transform: rotate(360deg); } }';
+    document.head.appendChild(style);
+})();
+</script>
+}

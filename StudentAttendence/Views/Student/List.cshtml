@@ -1,0 +1,75 @@
+@model IEnumerable<StudentAttendence.Models.Student>
+@{
+    ViewBag.Title = "All Students";
+}
+
+<div class="card">
+    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+        <div>
+            <h2 class="card-title">Registered Students</h2>
+            <p class="card-subtitle">@Model.Count() student(s) in the system</p>
+        </div>
+        <a href="@Url.Action("Register","Student")" class="btn btn-primary btn-sm">
+            + Register New
+        </a>
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div style="text-align:center;padding:3rem 0;color:#94a3b8;">
+            <div style="font-size:3rem;margin-bottom:1rem;">&#128101;</div>
+            <p>No students registered yet.</p>
+            <a href="@Url.Action("Register","Student")" class="btn btn-primary mt-2">Register First Student</a>
+        </div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Photo</th>
+                        <th>Name</th>
+                        <th>Roll No</th>
+                        <th>Email</th>
+                        <th>Department</th>
+                        <th>Year</th>
+                        <th>Registered On</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int i = 1; }
+                    @foreach (var s in Model)
+                    {
+                        <tr>
+                            <td style="color:#94a3b8;">@(i++)</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(s.PhotoBase64))
+                                {
+                                    <img src="data:image/jpeg;base64,@s.PhotoBase64"
+                                         alt="@s.FullName"
+                                         style="width:42px;height:42px;border-radius:50%;
+                                                object-fit:cover;border:2px solid rgba(108,99,255,.4);" />
+                                }
+                                else
+                                {
+                                    <div style="width:42px;height:42px;border-radius:50%;
+                                                background:rgba(255,255,255,.06);
+                                                display:flex;align-items:center;justify-content:center;
+                                                color:#475569;font-size:1.1rem;">&#128100;</div>
+                                }
+                            </td>
+                            <td style="font-weight:600;">@s.FullName</td>
+                            <td><span class="badge badge-primary">@s.PRN</span></td>
+                            <td style="color:#94a3b8;">@s.Email</td>
+                            <td>@s.Department</td>
+                            <td>Year @s.Year</td>
+                            <td style="color:#94a3b8;">@s.RegisteredOn.ToString("dd MMM yyyy")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

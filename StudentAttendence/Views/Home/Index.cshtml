@@ -1,0 +1,458 @@
+@{
+    ViewBag.Title = "Home";
+}
+
+<!-- Hero -->
+<div style="text-align:center; padding: 2.5rem 0 2rem;">
+    <!-- Solid Modern Badge for Computer Science Department -->
+    <div class="college-badge">
+        <span class="college-title">
+            TULJARAM CHATURCHAND COLLEGE
+        </span>
+        <span class="college-sub">
+            BARAMATI
+        </span>
+    </div>
+    <h1 class="portal-main-heading">
+        Student Attendance System
+    </h1>
+
+    <!-- Action Buttons -->
+    <div style="display:flex; gap:1.25rem; justify-content:center; flex-wrap:wrap;">
+
+        <a href="@Url.Action("Register", "Student")" class="hero-btn hero-btn-primary">
+            <span>Register Student</span>
+        </a>
+
+        <a href="@Url.Action("Mark", "Attendance")" class="hero-btn hero-btn-secondary">
+            <span>Mark Attendance</span>
+        </a>
+
+        <button type="button" id="openAddSubjectBtn" class="hero-btn hero-btn-success">
+            <span>+ Add Subject</span>
+        </button>
+
+        <button type="button" id="openAddPracticalBtn" class="hero-btn hero-btn-warning" style="background:linear-gradient(135deg,#f59e0b,#d97706); box-shadow:0 6px 24px rgba(245,158,11,.45);">
+            <span>+ Add Practical</span>
+        </button>
+
+    </div>
+</div>
+
+<!-- Feature cards -->
+<div class="grid-2" style="margin-top:3rem;">
+    <div class="card" style="border-color:rgba(108,99,255,.25);">
+        <div style="font-size:2rem; margin-bottom:.75rem;">&#128221;</div>
+        <div class="card-title" style="font-size:1rem;">Register Student</div>
+        <p class="card-subtitle">
+            Add new students with their full name, Roll No, email, department,
+            and year. Data is saved to your local database immediately.
+        </p>
+        <div class="mt-2">
+            <a href="@Url.Action("Register", "Student")" class="btn btn-primary btn-sm">Open Form &rarr;</a>
+        </div>
+    </div>
+
+    <div class="card" style="border-color:rgba(14,165,233,.25);">
+        <div style="font-size:2rem; margin-bottom:.75rem;">&#128247;</div>
+        <div class="card-title" style="font-size:1rem;">Mark Attendance</div>
+        <p class="card-subtitle">
+            Face recognition attendance with live GPS geo-fencing. Verifies student identity and ensures they are physically inside campus.
+        </p>
+        <div class="mt-2">
+            <a href="@Url.Action("Mark", "Attendance")" class="btn btn-secondary btn-sm">Open Scanner &rarr;</a>
+        </div>
+    </div>
+
+    <div class="card" style="border-color:rgba(34,197,94,.2);">
+        <div style="font-size:2rem; margin-bottom:.75rem;">&#128203;</div>
+        <div class="card-title" style="font-size:1rem;">Attendance Report</div>
+        <p class="card-subtitle">
+            View all attendance records, sorted by date, with student names and Roll numbers.
+        </p>
+        <div class="mt-2">
+            <a href="@Url.Action("Report", "Attendance")" class="btn btn-outline btn-sm">View Report &rarr;</a>
+        </div>
+    </div>
+
+    <div class="card" style="border-color:rgba(245,158,11,.2);">
+        <div style="font-size:2rem; margin-bottom:.75rem;">&#128101;</div>
+        <div class="card-title" style="font-size:1rem;">Student List</div>
+        <p class="card-subtitle">
+            Browse all registered students with their department, year, and registration date.
+        </p>
+        <div class="mt-2">
+            <a href="@Url.Action("List", "Student")" class="btn btn-outline btn-sm">View Students &rarr;</a>
+        </div>
+    </div>
+</div>
+
+<!-- ================= ADD SUBJECT MODAL ================= -->
+<div id="subjectModalOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); backdrop-filter:blur(6px); z-index:1000; overflow-y:auto; padding:2rem 1rem;">
+    <div style="max-width:640px; margin:2rem auto; background:var(--surface); border:1px solid rgba(255,255,255,0.12); border-radius:18px; padding:2rem; position:relative; box-shadow:0 20px 50px rgba(0,0,0,0.6); animation:modalPop .25s ease-out;">
+
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem;">
+            <div>
+                <h2 style="font-size:1.4rem; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px;">
+                    <span style="display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,#10b981,#059669); font-size:1rem;">&#128218;</span>
+                    Add Subject
+                </h2>
+                <p style="color:var(--muted); font-size:0.85rem; margin-top:4px;">
+                    Select stream, department, year &amp; subject — then fill in lecture details.
+                </p>
+            </div>
+            <button type="button" id="closeSubjectModalBtn" style="background:none; border:none; color:var(--muted); font-size:1.5rem; cursor:pointer; line-height:1; padding:4px;" title="Close">&times;</button>
+        </div>
+
+        <form id="addSubjectForm" autocomplete="off">
+            @Html.AntiForgeryToken()
+
+            <!-- ── ACADEMIC SELECTION PANEL ── -->
+            <div style="background:#16213e; border:1px solid rgba(14,165,233,.25); border-radius:14px; padding:1.25rem 1.4rem; margin-bottom:1.4rem;">
+                <div style="font-weight:700; font-size:.85rem; color:#38bdf8; text-transform:uppercase; letter-spacing:.05em; margin-bottom:1rem; display:flex; align-items:center; gap:8px;">
+                    <span>&#127891;</span> Academic Details
+                </div>
+
+                <div class="grid-2">
+                    <!-- 1. Stream -->
+                    <div class="form-group" style="margin-bottom:1rem;">
+                        <label for="SubjectStream" style="font-weight:700; color:#fff;">
+                            <span style="color:#38bdf8;">1.</span> Stream <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="SubjectStream" name="Stream" required class="form-control" style="background:#0f0f1a;">
+                            <option value="">-- Select Stream --</option>
+                            <option value="Arts">Arts</option>
+                            <option value="Commerce">Commerce</option>
+                            <option value="Diploma">Diploma</option>
+                            <option value="Science">Science</option>
+                            <option value="PHD">PHD</option>
+                            <option value="Vocational">Vocational</option>
+                            <option value="Professional">Professional</option>
+                            <option value="Others">Others</option>
+                        </select>
+                    </div>
+
+                    <!-- 2. Department -->
+                    <div class="form-group" style="margin-bottom:1rem;">
+                        <label for="SubjectDepartment" style="font-weight:700; color:#fff;">
+                            <span style="color:#38bdf8;">2.</span> Department <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="SubjectDepartment" name="Department" required class="form-control" style="background:#0f0f1a;" disabled>
+                            <option value="">-- Choose Stream First --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <!-- 3. Year -->
+                    <div class="form-group" style="margin-bottom:.5rem;">
+                        <label for="SubjectYear" style="font-weight:700; color:#fff;">
+                            <span style="color:#38bdf8;">3.</span> Year <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="SubjectYear" name="Year" required class="form-control" style="background:#0f0f1a;" disabled>
+                            <option value="">-- Choose Department First --</option>
+                            <option value="UG 1st yr">UG 1st yr</option>
+                            <option value="UG 2nd yr">UG 2nd yr</option>
+                            <option value="UG 3rd yr">UG 3rd yr</option>
+                            <option value="PG 1st yr">PG 1st yr</option>
+                            <option value="PG 2nd yr">PG 2nd yr</option>
+                        </select>
+                    </div>
+
+                    <!-- 4. Subject Name dropdown (filtered by Stream + Dept) -->
+                    <div class="form-group" style="margin-bottom:.5rem;">
+                        <label for="SubjectName" style="font-weight:700; color:#fff;">
+                            <span style="color:#38bdf8;">4.</span> Subject Name <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="SubjectName" name="SubjectName" required class="form-control" style="background:#0f0f1a;" disabled>
+                            <option value="">-- Choose Year First --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── SUBJECT DETAILS PANEL ── -->
+            <div style="background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:1.25rem 1.4rem; margin-bottom:1.4rem;">
+                <div style="font-weight:700; font-size:.85rem; color:#a78bfa; text-transform:uppercase; letter-spacing:.05em; margin-bottom:1rem;">
+                    &#128221; Subject Details
+                </div>
+
+                <!-- 5. Subject Code -->
+                <div class="form-group">
+                    <label for="SubjectCode">5. Subject Code <span style="color:#ef4444;">*</span></label>
+                    <input type="text" id="SubjectCode" name="SubjectCode" required placeholder="e.g. BSC-PHY, BA-ENG" />
+                </div>
+
+                <div class="grid-2">
+                    <!-- 6. No of Lectures -->
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label for="LecturesInSemester">6. Lectures in Semester <span style="color:#ef4444;">*</span></label>
+                        <input type="number" id="LecturesInSemester" name="LecturesInSemester" min="1" required placeholder="e.g. 45" />
+                    </div>
+
+                    <!-- 7. Lecture Time (manual text) -->
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label for="LectureTime">7. Lecture Time <span style="color:#ef4444;">*</span></label>
+                        <input type="text" id="LectureTime" name="LectureTime" required placeholder="e.g. 10:00 AM - 11:00 AM" />
+                    </div>
+                </div>
+            </div>
+
+            <div id="subjectFormError" class="alert alert-danger" style="display:none; margin-bottom:1rem;"></div>
+
+            <!-- Action buttons -->
+            <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1.5rem;">
+                <button type="button" id="cancelSubjectBtn" class="btn btn-outline">Cancel</button>
+                <button type="submit" id="saveSubjectBtn" class="btn" style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; box-shadow:0 4px 14px rgba(16,185,129,.35);">
+                    &#10003; Save Subject
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ================= ADD PRACTICAL MODAL ================= -->
+<div id="practicalModalOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); backdrop-filter:blur(6px); z-index:1000; overflow-y:auto; padding:2rem 1rem;">
+    <div style="max-width:640px; margin:2rem auto; background:var(--surface); border:1px solid rgba(245,158,11,0.3); border-radius:18px; padding:2rem; position:relative; box-shadow:0 20px 50px rgba(0,0,0,0.6); animation:modalPop .25s ease-out;">
+
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem;">
+            <div>
+                <h2 style="font-size:1.4rem; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px;">
+                    <span style="display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,#f59e0b,#d97706); font-size:1rem;">&#129514;</span>
+                    Add Practical
+                </h2>
+                <p style="color:var(--muted); font-size:0.85rem; margin-top:4px;">
+                    Select stream, department, year &amp; practical subject — then enter timing manually.
+                </p>
+            </div>
+            <button type="button" id="closePracticalModalBtn" style="background:none; border:none; color:var(--muted); font-size:1.5rem; cursor:pointer; line-height:1; padding:4px;" title="Close">&times;</button>
+        </div>
+
+        <form id="addPracticalForm" autocomplete="off">
+            @Html.AntiForgeryToken()
+
+            <!-- ── ACADEMIC SELECTION PANEL ── -->
+            <div style="background:#16213e; border:1px solid rgba(245,158,11,.3); border-radius:14px; padding:1.25rem 1.4rem; margin-bottom:1.4rem;">
+                <div style="font-weight:700; font-size:.85rem; color:#fbbf24; text-transform:uppercase; letter-spacing:.05em; margin-bottom:1rem; display:flex; align-items:center; gap:8px;">
+                    <span>&#127891;</span> Academic Details
+                </div>
+
+                <div class="grid-2">
+                    <!-- 1. Stream -->
+                    <div class="form-group" style="margin-bottom:1rem;">
+                        <label for="PracticalStream" style="font-weight:700; color:#fff;">
+                            <span style="color:#fbbf24;">1.</span> Stream <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="PracticalStream" name="Stream" required class="form-control" style="background:#0f0f1a;">
+                            <option value="">-- Select Stream --</option>
+                            <option value="Arts">Arts</option>
+                            <option value="Commerce">Commerce</option>
+                            <option value="Diploma">Diploma</option>
+                            <option value="Science">Science</option>
+                            <option value="PHD">PHD</option>
+                            <option value="Vocational">Vocational</option>
+                            <option value="Professional">Professional</option>
+                            <option value="Others">Others</option>
+                        </select>
+                    </div>
+
+                    <!-- 2. Department -->
+                    <div class="form-group" style="margin-bottom:1rem;">
+                        <label for="PracticalDepartment" style="font-weight:700; color:#fff;">
+                            <span style="color:#fbbf24;">2.</span> Department <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="PracticalDepartment" name="Department" required class="form-control" style="background:#0f0f1a;" disabled>
+                            <option value="">-- Choose Stream First --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <!-- 3. Year -->
+                    <div class="form-group" style="margin-bottom:.5rem;">
+                        <label for="PracticalYear" style="font-weight:700; color:#fff;">
+                            <span style="color:#fbbf24;">3.</span> Year <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="PracticalYear" name="Year" required class="form-control" style="background:#0f0f1a;" disabled>
+                            <option value="">-- Choose Department First --</option>
+                            <option value="UG 1st yr">UG 1st yr</option>
+                            <option value="UG 2nd yr">UG 2nd yr</option>
+                            <option value="UG 3rd yr">UG 3rd yr</option>
+                            <option value="PG 1st yr">PG 1st yr</option>
+                            <option value="PG 2nd yr">PG 2nd yr</option>
+                        </select>
+                    </div>
+
+                    <!-- 4. Practical Subject Name dropdown (filtered by Stream + Dept) -->
+                    <div class="form-group" style="margin-bottom:.5rem;">
+                        <label for="PracticalSubjectNameSelect" style="font-weight:700; color:#fff;">
+                            <span style="color:#fbbf24;">4.</span> Practical Subject <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="PracticalSubjectNameSelect" name="SubjectName" required class="form-control" style="background:#0f0f1a;" disabled>
+                            <option value="">-- Choose Year First --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── PRACTICAL DETAILS PANEL ── -->
+            <div style="background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:1.25rem 1.4rem; margin-bottom:1.4rem;">
+                <div style="font-weight:700; font-size:.85rem; color:#fbbf24; text-transform:uppercase; letter-spacing:.05em; margin-bottom:1rem;">
+                    &#128221; Practical Details
+                </div>
+
+                <!-- 5. Practical Code -->
+                <div class="form-group">
+                    <label for="StandalonePracticalCode">5. Practical Code <span style="color:#ef4444;">*</span></label>
+                    <input type="text" id="StandalonePracticalCode" name="SubjectCode" required placeholder="e.g. BSC-PHY-P, BCA-PRAC" />
+                </div>
+
+                <div class="grid-2">
+                    <!-- 6. No of Practicals -->
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label for="StandalonePracticalsInSemester">6. Practicals in Semester <span style="color:#ef4444;">*</span></label>
+                        <input type="number" id="StandalonePracticalsInSemester" name="LecturesInSemester" min="1" required placeholder="e.g. 15" />
+                    </div>
+
+                    <!-- 7. Practical Timing (manual text) -->
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label for="StandalonePracticalTiming">7. Time of Practical <span style="color:#ef4444;">*</span></label>
+                        <input type="text" id="StandalonePracticalTiming" name="LectureTime" required placeholder="e.g. 02:00 PM - 04:00 PM" />
+                    </div>
+                </div>
+            </div>
+
+            <div id="practicalFormError" class="alert alert-danger" style="display:none; margin-bottom:1rem;"></div>
+
+            <!-- Action buttons -->
+            <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1.5rem;">
+                <button type="button" id="cancelPracticalBtn" class="btn btn-outline">Cancel</button>
+                <button type="submit" id="savePracticalBtn" class="btn" style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; box-shadow:0 4px 14px rgba(245,158,11,.35);">
+                    &#10003; Save Practical
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- ================= SUCCESS POPUP MODAL ================= -->
+<div id="successPopupModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(6px); z-index:1300; align-items:center; justify-content:center; padding:1rem;">
+    <div style="background:var(--surface); border:1px solid rgba(34,197,94,0.4); border-radius:20px; padding:2.5rem 2rem; max-width:440px; width:100%; text-align:center; box-shadow:0 25px 60px rgba(0,0,0,0.7); animation:modalPop .25s ease-out;">
+        <div style="width:68px; height:68px; border-radius:50%; background:rgba(34,197,94,0.15); border:2px solid #22c55e; color:#4ade80; display:inline-flex; align-items:center; justify-content:center; font-size:2rem; margin-bottom:1.25rem;">
+            &#10003;
+        </div>
+        <h3 style="font-size:1.3rem; font-weight:700; color:#fff; margin-bottom:0.5rem;">Success!</h3>
+        <p id="successPopupMessage" style="color:#cbd5e1; font-size:1rem; line-height:1.5; margin-bottom:1.75rem;">
+            Subject and practical are added successfully
+        </p>
+        <button type="button" id="closeSuccessPopupBtn" class="btn btn-success" style="padding:0.75rem 2rem; border-radius:10px; font-weight:700;">
+            OK
+        </button>
+    </div>
+</div>
+
+<style>
+    @@keyframes modalPop {
+        from {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    .college-badge {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1.1rem 2.4rem;
+        border-radius: 20px;
+        margin-bottom: 1.8rem;
+        background: linear-gradient(135deg, rgba(108,99,255,0.18), rgba(14,165,233,0.18));
+        border: 1px solid rgba(167,139,250,0.35);
+        box-shadow: 0 12px 35px rgba(108,99,255,0.22), inset 0 1px 0 rgba(255,255,255,0.15);
+        backdrop-filter: blur(10px);
+        text-align: center;
+    }
+    .college-title {
+        font-size: 1.35rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        background: linear-gradient(135deg, #ffffff, #e2e8f0);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        line-height: 1.2;
+    }
+    .college-sub {
+        font-size: 0.85rem;
+        font-weight: 700;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: #38bdf8;
+        margin-top: 0.35rem;
+        line-height: 1;
+    }
+    .portal-main-heading {
+        font-size: 2.2rem;
+        font-weight: 800;
+        margin-bottom: .6rem;
+        background: linear-gradient(135deg,#a78bfa,#38bdf8);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .hero-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 1.1rem 2.2rem;
+        border-radius: 14px;
+        font-size: 1rem;
+        font-weight: 700;
+        text-decoration: none;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        transition: transform .2s, box-shadow .2s;
+    }
+    .hero-btn:hover {
+        transform: translateY(-3px);
+    }
+    .hero-btn-primary {
+        background: linear-gradient(135deg,#6c63ff,#574fd6);
+        box-shadow: 0 6px 24px rgba(108,99,255,.45);
+    }
+    .hero-btn-primary:hover {
+        box-shadow: 0 10px 32px rgba(108,99,255,.55);
+    }
+    .hero-btn-secondary {
+        background: linear-gradient(135deg,#0ea5e9,#0284c7);
+        box-shadow: 0 6px 24px rgba(14,165,233,.45);
+    }
+    .hero-btn-secondary:hover {
+        box-shadow: 0 10px 32px rgba(14,165,233,.55);
+    }
+    .hero-btn-success {
+        background: linear-gradient(135deg,#10b981,#059669);
+        box-shadow: 0 6px 24px rgba(16,185,129,.45);
+    }
+    .hero-btn-success:hover {
+        box-shadow: 0 10px 32px rgba(16,185,129,.55);
+    }
+
+</style>
+
+@section scripts {
+    <script src="~/Scripts/index-addsubject.js"></script>
+}
+

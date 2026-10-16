@@ -1,0 +1,1037 @@
+@model StudentAttendence.Models.Student
+@{
+    ViewBag.Title = "Register Student";
+    // Store CDN URLs in C# strings — @ inside a C# string is a plain character,
+    // so no Razor escaping issues at all.
+    var faceApiJs    = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js";
+    var faceModelUrl = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/";
+}
+
+@* ── Success banner ── *@
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success" style="max-width:780px;margin:0 auto 1.5rem;">
+        <span>&#10003;</span> @TempData["SuccessMessage"]
+    </div>
+}
+
+@* ── Face error banner ── *@
+@if (ViewBag.FaceError != null)
+{
+    <div style="max-width:780px; margin:0 auto 1.5rem;
+                background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.4);
+                border-left:4px solid #ef4444; border-radius:12px; padding:1rem 1.4rem;
+                display:flex; align-items:center; gap:12px; color:#f87171;">
+        <span style="font-size:1.4rem;">&#9888;</span>
+        <span>@ViewBag.FaceError</span>
+    </div>
+}
+
+@* ── Duplicate error banner ── *@
+@if (ViewBag.DuplicateError != null)
+{
+    <div style="max-width:780px; margin:0 auto 1.5rem;
+                background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.4);
+                border-left:4px solid #ef4444; border-radius:12px; padding:1.1rem 1.4rem;
+                display:flex; align-items:flex-start; gap:14px;">
+        <div style="font-size:1.6rem; color:#ef4444; margin-top:2px;">&#9888;</div>
+        <div>
+            <div style="font-weight:700; color:#f87171; font-size:.95rem; margin-bottom:.3rem;">
+                Student Already Registered
+            </div>
+            <div style="color:#fca5a5; font-size:.875rem;">@ViewBag.DuplicateError</div>
+            <div style="margin-top:.75rem;">
+                <a href="@Url.Action("List","Student")" class="btn btn-outline btn-sm">View All Students &rarr;</a>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="card" style="max-width:780px; margin:0 auto;">
+    <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:42px;height:42px;border-radius:12px;
+                        background:linear-gradient(135deg,#6c63ff,#574fd6);
+                        display:flex;align-items:center;justify-content:center;
+                        color:#fff; font-size:1.4rem; font-weight:900;">+</div>
+            <div>
+                <h2 class="card-title" style="font-size:1.35rem;">Register New Student</h2>
+                <p class="card-subtitle">Face scan required &mdash; look straight at the camera</p>
+            </div>
+        </div>
+        <div>
+            <button type="button" id="btnOpenRemoveModal" class="btn btn-outline btn-sm"
+                    style="color:#f87171; border-color:rgba(239,68,68,.35); background:rgba(239,68,68,.08); font-size:.82rem; padding:.45rem .85rem;">
+                &#128465; Remove Student
+            </button>
+        </div>
+    </div>
+
+    @using (Html.BeginForm("Register", "Student", FormMethod.Post, new { id = "registerForm" }))
+    {
+        @Html.AntiForgeryToken()
+
+        <!-- Hidden face data fields -->
+        <input type="hidden" name="PhotoBase64"    id="PhotoBase64"    />
+        <input type="hidden" name="FaceDescriptor" id="FaceDescriptor" />
+
+        
+        <!-- FACE SCAN SECTION                                              -->
+        
+        <div style="margin-bottom:1.75rem;">
+            <label style="display:block; font-size:.8rem; font-weight:600; color:#94a3b8;
+                          text-transform:uppercase; letter-spacing:.04em; margin-bottom:.75rem;">
+                Face Photo <span style="color:#ef4444;">*</span>
+            </label>
+
+            <!-- Status bar -->
+            <div id="faceStatus"
+                 style="display:flex; align-items:center; gap:10px; padding:.6rem 1rem;
+                        background:#0f172a; border:1px solid rgba(255,255,255,.08);
+                        border-radius:10px; margin-bottom:.75rem; font-size:.82rem; color:#94a3b8;">
+                <span id="statusDot"
+                      style="width:10px;height:10px;border-radius:50%;background:#f59e0b;
+                             display:inline-block; flex-shrink:0;"></span>
+                <span id="statusText">Loading face detection models</span>
+            </div>
+
+            <!-- Video + captured photo side by side on wide screens -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+
+                <!-- Live camera -->
+                <div>
+                    <div style="font-size:.75rem; color:#64748b; margin-bottom:.4rem; text-transform:uppercase; letter-spacing:.04em;">
+                        Live Camera
+                    </div>
+                    <div id="videoWrap"
+                         style="position:relative; border-radius:12px; overflow:hidden;
+                                border:2px solid rgba(255,255,255,.08); background:#000; aspect-ratio:4/3;">
+                        <video id="webcamVideo" autoplay muted playsinline
+                               style="width:100%; height:100%; object-fit:cover; display:block;"></video>
+                        <canvas id="overlayCanvas"
+                                style="position:absolute; top:0; left:0; width:100%; height:100%;"></canvas>
+                        <!-- Overlay when no camera access yet -->
+                        <div id="noCameraMsg"
+                             style="position:absolute;inset:0;display:flex;flex-direction:column;
+                                    align-items:center;justify-content:center;color:#475569;font-size:.82rem;gap:.5rem;">
+                            <div style="font-size:2rem;">&#128247;</div>
+                            <span>Camera loading&hellip;</span>
+                        </div>
+                    </div>
+                    <button type="button" id="captureBtn" class="btn btn-secondary" disabled
+                            style="width:100%; margin-top:.6rem; justify-content:center;">
+                        &#9679; Capture Face
+                    </button>
+                </div>
+
+                <!-- Captured photo -->
+                <div>
+                    <div style="font-size:.75rem; color:#64748b; margin-bottom:.4rem; text-transform:uppercase; letter-spacing:.04em;">
+                        Captured Photo
+                    </div>
+                    <div id="capturedWrap"
+                         style="position:relative; border-radius:12px; overflow:hidden; aspect-ratio:4/3;
+                                border:2px dashed rgba(255,255,255,.12); background:#0f172a;
+                                display:flex; align-items:center; justify-content:center; color:#334155; font-size:.82rem;">
+                        <div id="capturedPlaceholder" style="text-align:center;">
+                            <div style="font-size:2.5rem; margin-bottom:.4rem;">&#128100;</div>
+                            <span>No photo yet</span>
+                        </div>
+                        <img id="capturedImg" src="" alt="Captured face"
+                             style="display:none; width:100%; height:100%; object-fit:cover; border-radius:10px;" />
+                    </div>
+                    <button type="button" id="retakeBtn" class="btn btn-outline" disabled
+                            style="width:100%; margin-top:.6rem; justify-content:center;">
+                        &#8635; Retake Photo
+                    </button>
+                </div>
+            </div>
+
+            <!-- Face check indicator -->
+            <div id="faceCheck" style="display:none; margin-top:.75rem; padding:.75rem 1rem;
+                 border-radius:10px; font-size:.82rem; font-weight:600;"></div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- STUDENT DETAILS FORM                                           -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <div style="border-top:1px solid rgba(255,255,255,.06); padding-top:1.5rem;">
+            <div class="grid-2">
+                <div class="form-group">
+                    @Html.LabelFor(m => m.FullName)
+                    @Html.TextBoxFor(m => m.FullName, new { @placeholder = "First Name Middle Name Last Name", @autocomplete = "off" })
+                    @Html.ValidationMessageFor(m => m.FullName)
+                </div>
+                <div class="form-group">
+                    @Html.LabelFor(m => m.PRN)
+                    @Html.TextBoxFor(m => m.PRN, new { @placeholder = "19507", @autocomplete = "off" })
+                    @Html.ValidationMessageFor(m => m.PRN)
+                </div>
+            </div>
+
+            <div class="form-group">
+                @Html.LabelFor(m => m.Email)
+                @Html.TextBoxFor(m => m.Email, new { @type = "email", @placeholder = "student@gmail.com" })
+                @Html.ValidationMessageFor(m => m.Email)
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <!-- 4-STEP CASCADING ACADEMIC SELECTION                         -->
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <div style="background:#16213e; border:1px solid rgba(14,165,233,.25); border-radius:14px; padding:1.25rem 1.4rem; margin-bottom:1.5rem;">
+                <div style="font-weight:700; font-size:.9rem; color:#38bdf8; text-transform:uppercase; letter-spacing:.05em; margin-bottom:1rem; display:flex; align-items:center; gap:8px;">
+                    <span>&#127891;</span> Academic Details
+                </div>
+
+                <!-- Hidden input that holds the final composite department string for EF Model -->
+                <input type="hidden" name="Department" id="FinalDepartmentInput" value="" />
+
+                <div class="grid-2">
+                    <!-- 1ST: STREAM SELECTION -->
+                    <div class="form-group" style="margin-bottom:1rem;">
+                        <label for="streamSelect" style="font-weight:700; color:#fff; display:flex; align-items:center; gap:6px;">
+                            <span style="color:#38bdf8;">1.</span> Select Stream <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="streamSelect" class="form-control" style="background:#0f0f1a;" required>
+                            <option value="">-- Select Stream --</option>
+                            <option value="Arts">Arts</option>
+                            <option value="Commerce">Commerce</option>
+                            <option value="Diploma">Diploma</option>
+                            <option value="Science">Science</option>
+                            <option value="PHD">PHD</option>
+                            <option value="Vocational">Vocational</option>
+                            <option value="Professional">Professional</option>
+                            <option value="Others">Others</option>
+                        </select>
+                    </div>
+
+                    <!-- 2ND: DEPARTMENT SELECTION -->
+                    <div class="form-group" style="margin-bottom:1rem;">
+                        <label for="deptSelect" style="font-weight:700; color:#fff; display:flex; align-items:center; gap:6px;">
+                            <span style="color:#38bdf8;">2.</span> Select Department <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="deptSelect" class="form-control" style="background:#0f0f1a;" required disabled>
+                            <option value="">-- Choose Stream First --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 3RD: YEAR SELECTION -->
+                <div class="form-group" style="margin-bottom:1rem;">
+                    @Html.LabelFor(m => m.Year, "3. Select Year", new { @style = "font-weight:700; color:#fff;" })
+                    <select id="Year" name="Year" class="form-control" style="background:#0f0f1a;" required disabled>
+                        <option value="">-- Choose Department First --</option>
+                        <option value="1">UG 1st yr</option>
+                        <option value="2">UG 2nd yr</option>
+                        <option value="3">UG 3rd yr</option>
+                        <option value="4">PG 1st yr</option>
+                        <option value="5">PG 2nd yr</option>
+                    </select>
+                    @Html.ValidationMessageFor(m => m.Year)
+                </div>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:.75rem; margin-top:1rem;">
+            <button type="submit" class="btn btn-primary" id="registerBtn">
+                &#10003; Register Student
+            </button>
+            <a href="@Url.Action("Index","Home")" class="btn btn-outline">&larr; Back to Home</a>
+        </div>
+    }
+</div>
+
+<!-- ═════════════════════════════════════════════════════════════════ -->
+<!-- REMOVE STUDENT / CLASS MODAL                                      -->
+<!-- ═════════════════════════════════════════════════════════════════ -->
+<div id="removeModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:999; align-items:center; justify-content:center; padding:1.5rem; backdrop-filter:blur(6px);">
+    <div style="background:#1a1a2e; border:1px solid rgba(239,68,68,.3); border-radius:16px; width:100%; max-width:540px; box-shadow:0 16px 40px rgba(0,0,0,.6); overflow:hidden;">
+        
+        <!-- Modal Header -->
+        <div style="padding:1.25rem 1.5rem; border-bottom:1px solid rgba(255,255,255,.08); display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:34px;height:34px;border-radius:10px;background:rgba(239,68,68,.15);display:flex;align-items:center;justify-content:center;color:#f87171;font-size:1.1rem;">
+                    &#128465;
+                </div>
+                <div>
+                    <h3 style="font-size:1.15rem; font-weight:700; color:#fff;">Remove From Database</h3>
+                    <p style="font-size:.78rem; color:#94a3b8;">Delete a particular student by Roll No or an entire class</p>
+                </div>
+            </div>
+            <button type="button" id="btnCloseRemoveModal" style="background:none; border:none; color:#94a3b8; font-size:1.5rem; cursor:pointer; padding:0 .4rem;">&times;</button>
+        </div>
+
+        <!-- Modal Mode Switcher Tabs -->
+        <div style="display:flex; gap:8px; padding:1rem 1.5rem .5rem; background:#16213e;">
+            <button type="button" id="tabByPrn" class="btn btn-sm"
+                    style="flex:1; justify-content:center; background:#ef4444; color:#fff; border:none; padding:.55rem; font-size:.85rem;">
+                &#128100; Particular Student (by Roll No)
+            </button>
+            <button type="button" id="tabByClass" class="btn btn-outline btn-sm"
+                    style="flex:1; justify-content:center; color:#94a3b8; border-color:rgba(255,255,255,.1); padding:.55rem; font-size:.85rem;">
+                &#127979; Entire Class (by Dept &amp; Year)
+            </button>
+        </div>
+
+        <div style="padding:1.5rem;">
+            <!-- Alert message inside modal -->
+            <div id="modalAlert" style="display:none; padding:.75rem 1rem; border-radius:10px; margin-bottom:1.2rem; font-size:.85rem;"></div>
+
+            <!-- Form 1: Delete by Roll No -->
+            <div id="formPrnSection">
+                <div class="form-group">
+                    <label class="form-label">Student Roll Number</label>
+                    <input type="text" id="removePrnInput" class="form-control" placeholder="e.g., 101, 2026CS01" style="background:#0f0f1a;" />
+                    <small style="color:#94a3b8; font-size:.78rem; display:block; margin-top:.35rem;">
+                        Enter the exact Roll No of the student you want to delete.
+                    </small>
+                </div>
+
+                <div style="display:flex; gap:10px; margin-top:1.5rem;">
+                    <button type="button" id="btnConfirmDeletePrn" class="btn btn-sm"
+                            style="flex:1; justify-content:center; background:#ef4444; color:#fff; border:none; padding:.75rem; font-weight:700;">
+                        &#128465; Delete This Student
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm btnCancelModal" style="padding:.75rem 1.2rem;">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+            <!-- Form 2: Delete by Class -->
+            <div id="formClassSection" style="display:none;">
+                <div class="form-group">
+                    <label class="form-label">Department / Branch</label>
+                    <select id="removeClassDept" class="form-control" style="background:#0f0f1a;">
+                        <option value="">-- Select Department --</option>
+                        <option value="Computer Engineering">Computer Engineering</option>
+                        <option value="Information Technology">Information Technology</option>
+                        <option value="Mechanical Engineering">Mechanical Engineering</option>
+                        <option value="Civil Engineering">Civil Engineering</option>
+                        <option value="Electronics & Telecommunication">Electronics &amp; Telecommunication</option>
+                        <option value="Electrical Engineering">Electrical Engineering</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Class Year</label>
+                    <select id="removeClassYear" class="form-control" style="background:#0f0f1a;">
+                        <option value="">-- Select Year --</option>
+                        <option value="1">1st Year</option>
+                        <option value="2">2nd Year</option>
+                        <option value="3">3rd Year</option>
+                        <option value="4">4th Year</option>
+                    </select>
+                </div>
+
+                <div style="background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.25); border-radius:8px; padding:.75rem; margin-top:1rem; font-size:.78rem; color:#fca5a5;">
+                    &#9888; <strong>Warning:</strong> All students belonging to this department and year, along with their attendance records, will be permanently deleted.
+                </div>
+
+                <div style="display:flex; gap:10px; margin-top:1.5rem;">
+                    <button type="button" id="btnConfirmDeleteClass" class="btn btn-sm"
+                            style="flex:1; justify-content:center; background:#ef4444; color:#fff; border:none; padding:.75rem; font-weight:700;">
+                        &#128465; Delete Entire Class
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm btnCancelModal" style="padding:.75rem 1.2rem;">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Success Popup Notification Modal -->
+<div id="successPopupModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:1000; align-items:center; justify-content:center; padding:1.5rem; backdrop-filter:blur(6px);">
+    <div style="background:#1a1a2e; border:1px solid rgba(34,197,94,.4); border-left:5px solid #22c55e; border-radius:16px; width:100%; max-width:480px; padding:1.75rem; text-align:center; box-shadow:0 16px 40px rgba(0,0,0,.6);">
+        <div style="width:60px; height:60px; border-radius:50%; background:rgba(34,197,94,.15); display:inline-flex; align-items:center; justify-content:center; color:#22c55e; font-size:2rem; margin-bottom:1rem;">
+            &#10004;
+        </div>
+        <h3 style="font-size:1.3rem; font-weight:800; color:#fff; margin-bottom:.5rem;">Removed Successfully!</h3>
+        <p id="successPopupText" style="color:#86efac; font-size:.92rem; line-height:1.6; margin-bottom:1.5rem;"></p>
+        <button type="button" id="btnCloseSuccessPopup" class="btn btn-secondary" style="width:100%; justify-content:center; padding:.75rem;">
+            OK
+        </button>
+    </div>
+</div>
+
+@section scripts {
+<!-- face-api.js from CDN -->
+<script src="@faceApiJs"></script>
+<script>
+(function () {
+    /* ── Config ──────────────────────────────────────────────────── */
+    var MODEL_URL = '@faceModelUrl';
+    const DETECT_INTERVAL_MS = 200;  // how often to run detection
+
+    /* ── DOM refs ────────────────────────────────────────────────── */
+    var video        = document.getElementById('webcamVideo');
+    var overlay      = document.getElementById('overlayCanvas');
+    var captureBtn   = document.getElementById('captureBtn');
+    var retakeBtn    = document.getElementById('retakeBtn');
+    var capturedImg  = document.getElementById('capturedImg');
+    var placeholder  = document.getElementById('capturedPlaceholder');
+    var capturedWrap = document.getElementById('capturedWrap');
+    var faceCheck    = document.getElementById('faceCheck');
+    var noCameraMsg  = document.getElementById('noCameraMsg');
+    var statusDot    = document.getElementById('statusDot');
+    var statusText   = document.getElementById('statusText');
+    var photoInput   = document.getElementById('PhotoBase64');
+    var descInput    = document.getElementById('FaceDescriptor');
+    var registerBtn  = document.getElementById('registerBtn');
+    var form         = document.getElementById('registerForm');
+
+    var currentDetection = null;
+    var detectionTimer   = null;
+    var photoCaptured    = false;
+
+    /* ── Status helpers ─────────────────────────────────────────── */
+    function setStatus(text, color) {
+        statusText.textContent = text;
+        statusDot.style.background = color || '#94a3b8';
+    }
+
+    /* ── Load models then start camera ─────────────────────────── */
+    async function init() {
+        try {
+            setStatus('Loading face detection models\u2026', '#f59e0b');
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+            setStatus('Models ready \u2014 starting camera\u2026', '#f59e0b');
+            await startCamera();
+        } catch (err) {
+            setStatus('Error loading models: ' + err.message, '#ef4444');
+        }
+    }
+
+    /* ── Start webcam ───────────────────────────────────────────── */
+    async function startCamera() {
+        try {
+            var stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+            });
+            video.srcObject = stream;
+            noCameraMsg.style.display = 'none';
+        } catch (e) {
+            setStatus('Camera access denied. Please allow camera permission.', '#ef4444');
+        }
+    }
+
+    /* ── Start detection loop once video plays ──────────────────── */
+    video.addEventListener('play', function () {
+        overlay.width  = video.videoWidth  || 640;
+        overlay.height = video.videoHeight || 480;
+        setStatus('Camera active \u2014 position your face in frame', '#6c63ff');
+        detectionTimer = setInterval(detectFace, DETECT_INTERVAL_MS);
+    });
+
+    /* ── Real-time face detection ───────────────────────────────── */
+    async function detectFace() {
+        if (photoCaptured) return;
+
+        var ctx = overlay.getContext('2d');
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+        try {
+            var result = await faceapi
+                .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            currentDetection = result || null;
+
+            if (result) {
+                /* Draw detection box */
+                var box = result.detection.box;
+                var scaleX = overlay.width  / video.videoWidth;
+                var scaleY = overlay.height / video.videoHeight;
+
+                ctx.strokeStyle = '#22c55e';
+                ctx.lineWidth   = 3;
+                ctx.shadowColor = '#22c55e';
+                ctx.shadowBlur  = 10;
+                ctx.strokeRect(
+                    box.x * scaleX, box.y * scaleY,
+                    box.width * scaleX, box.height * scaleY
+                );
+
+                /* Corner decorations */
+                var x = box.x * scaleX, y = box.y * scaleY,
+                    w = box.width * scaleX, h = box.height * scaleY, len = 18;
+                ctx.shadowBlur = 0;
+                ctx.lineWidth  = 4;
+                [[x,y,x+len,y,x,y+len],[x+w,y,x+w-len,y,x+w,y+len],
+                 [x,y+h,x+len,y+h,x,y+h-len],[x+w,y+h,x+w-len,y+h,x+w,y+h-len]]
+                .forEach(function(c){
+                    ctx.beginPath(); ctx.moveTo(c[0],c[1]);
+                    ctx.lineTo(c[2],c[3]); ctx.moveTo(c[0],c[1]); ctx.lineTo(c[4],c[5]);
+                    ctx.stroke();
+                });
+
+                var conf = Math.round(result.detection.score * 100);
+                setStatus('Face detected (' + conf + '% confidence) \u2014 click Capture', '#22c55e');
+                captureBtn.disabled = false;
+                captureBtn.style.opacity = '1';
+            } else {
+                setStatus('No face detected \u2014 look straight at the camera', '#f59e0b');
+                captureBtn.disabled = true;
+                captureBtn.style.opacity = '.5';
+                currentDetection = null;
+            }
+        } catch (e) { /* ignore transient errors */ }
+    }
+
+    /* ── Capture button ─────────────────────────────────────────── */
+    captureBtn.addEventListener('click', function () {
+        if (!currentDetection) return;
+
+        /* Draw video frame to a hidden canvas and export as JPEG */
+        var snapCanvas = document.createElement('canvas');
+        snapCanvas.width  = video.videoWidth  || 640;
+        snapCanvas.height = video.videoHeight || 480;
+        snapCanvas.getContext('2d').drawImage(video, 0, 0);
+        var dataUrl = snapCanvas.toDataURL('image/jpeg', 0.85);
+
+        /* Extract base64 part only (strip data:image/jpeg;base64, prefix) */
+        var base64 = dataUrl.split(',')[1];
+
+        /* Serialise the face descriptor (Float32Array -> JSON array) */
+        var descArr = Array.from(currentDetection.descriptor);
+        var descJson = JSON.stringify(descArr);
+
+        /* Populate hidden inputs */
+        photoInput.value = base64;
+        descInput.value  = descJson;
+
+        /* Show captured image */
+        capturedImg.src = dataUrl;
+        capturedImg.style.display = 'block';
+        placeholder.style.display = 'none';
+        capturedWrap.style.borderColor = 'rgba(34,197,94,.5)';
+
+        /* Freeze detection and turn off camera */
+        photoCaptured = true;
+        clearInterval(detectionTimer);
+        overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
+
+        /* Stop camera stream & turn off device camera LED */
+        if (video.srcObject) {
+            video.srcObject.getTracks().forEach(function (track) {
+                track.stop();
+            });
+            video.srcObject = null;
+        }
+
+        /* Update UI */
+        captureBtn.disabled = true;
+        retakeBtn.disabled  = false;
+        setStatus('Face captured successfully!!', '#22c55e');
+
+        showFaceCheck(true, 'Face captured successfully!!');
+    });
+
+    /* ── Retake button ──────────────────────────────────────────── */
+    retakeBtn.addEventListener('click', async function () {
+        photoInput.value = '';
+        descInput.value  = '';
+        photoCaptured    = false;
+        currentDetection = null;
+
+        capturedImg.style.display = 'none';
+        capturedImg.src = '';
+        placeholder.style.display = 'flex';
+        capturedWrap.style.borderColor = 'rgba(255,255,255,.12)';
+
+        captureBtn.disabled = true;
+        retakeBtn.disabled  = true;
+        setStatus('Restarting camera\u2026', '#f59e0b');
+        showFaceCheck(false, '');
+
+        /* Restart webcam */
+        await startCamera();
+    });
+
+    /* ── Face check indicator ───────────────────────────────────── */
+    function showFaceCheck(ok, msg) {
+        if (!msg) { faceCheck.style.display = 'none'; return; }
+        faceCheck.style.display = 'block';
+        faceCheck.style.background = ok ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.12)';
+        faceCheck.style.border = ok ? '1px solid rgba(34,197,94,.3)' : '1px solid rgba(239,68,68,.3)';
+        faceCheck.style.color = ok ? '#4ade80' : '#f87171';
+        faceCheck.innerHTML = (ok ? '&#10003; ' : '&#10007; ') + msg;
+    }
+
+    /* ── Form guard: block submit if no face ────────────────────── */
+    form.addEventListener('submit', function (e) {
+        if (!photoInput.value || !descInput.value) {
+            e.preventDefault();
+            showFaceCheck(false, 'You must capture your face before registering.');
+            faceCheck.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+        registerBtn.disabled = true;
+        registerBtn.innerHTML = 'Registering\u2026';
+    });
+
+    /* ── Kick off ───────────────────────────────────────────────── */
+    init();
+
+    /* ═════════════════════════════════════════════════════════════ */
+    /* REMOVE STUDENT / CLASS MODAL HANDLERS                         */
+    /* ═════════════════════════════════════════════════════════════ */
+    var removeModal        = document.getElementById('removeModal');
+    var successPopupModal  = document.getElementById('successPopupModal');
+    var successPopupText   = document.getElementById('successPopupText');
+    var modalAlert         = document.getElementById('modalAlert');
+    var tabByPrn           = document.getElementById('tabByPrn');
+    var tabByClass         = document.getElementById('tabByClass');
+    var formPrnSection     = document.getElementById('formPrnSection');
+    var formClassSection   = document.getElementById('formClassSection');
+    var csrfToken          = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+
+    // Open & Close Modal
+    document.getElementById('btnOpenRemoveModal').addEventListener('click', function () {
+        hideModalAlert();
+        removeModal.style.display = 'flex';
+    });
+
+    document.getElementById('btnCloseRemoveModal').addEventListener('click', function () {
+        removeModal.style.display = 'none';
+    });
+
+    document.querySelectorAll('.btnCancelModal').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            removeModal.style.display = 'none';
+        });
+    });
+
+    document.getElementById('btnCloseSuccessPopup').addEventListener('click', function () {
+        successPopupModal.style.display = 'none';
+        window.location.reload();
+    });
+
+    // Tab switching inside modal
+    tabByPrn.addEventListener('click', function () {
+        tabByPrn.style.background = '#ef4444';
+        tabByPrn.style.color = '#fff';
+        tabByClass.style.background = 'transparent';
+        tabByClass.style.color = '#94a3b8';
+        formPrnSection.style.display = 'block';
+        formClassSection.style.display = 'none';
+        hideModalAlert();
+    });
+
+    tabByClass.addEventListener('click', function () {
+        tabByClass.style.background = '#ef4444';
+        tabByClass.style.color = '#fff';
+        tabByPrn.style.background = 'transparent';
+        tabByPrn.style.color = '#94a3b8';
+        formPrnSection.style.display = 'none';
+        formClassSection.style.display = 'block';
+        hideModalAlert();
+    });
+
+    function showModalAlert(msg, isSuccess) {
+        modalAlert.style.display = 'block';
+        modalAlert.style.background = isSuccess ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)';
+        modalAlert.style.border = isSuccess ? '1px solid rgba(34,197,94,.4)' : '1px solid rgba(239,68,68,.4)';
+        modalAlert.style.color = isSuccess ? '#4ade80' : '#f87171';
+        modalAlert.textContent = msg;
+    }
+
+    function hideModalAlert() {
+        modalAlert.style.display = 'none';
+    }
+
+    function triggerSuccessPopup(msg) {
+        removeModal.style.display = 'none';
+        successPopupText.textContent = msg;
+        successPopupModal.style.display = 'flex';
+    }
+
+    // 1. Delete Student by Roll No
+    document.getElementById('btnConfirmDeletePrn').addEventListener('click', function () {
+        var prn = (document.getElementById('removePrnInput').value || '').trim();
+        if (!prn) {
+            showModalAlert('Please enter the student Roll Number.', false);
+            return;
+        }
+
+        if (!confirm('Are you sure you want to permanently delete student with Roll No "' + prn + '"?')) {
+            return;
+        }
+
+        var btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Removing...';
+        hideModalAlert();
+
+        var formData = new FormData();
+        formData.append('__RequestVerificationToken', csrfToken);
+        formData.append('prn', prn);
+
+        fetch('@Url.Action("RemoveByPrn", "Student")', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            btn.disabled = false;
+            btn.innerHTML = '&#128465; Delete This Student';
+            if (data.success) {
+                triggerSuccessPopup(data.message);
+            } else {
+                showModalAlert(data.message || 'Could not remove student.', false);
+            }
+        })
+        .catch(function (err) {
+            btn.disabled = false;
+            btn.innerHTML = '&#128465; Delete This Student';
+            showModalAlert('Error: ' + err.message, false);
+        });
+    });
+
+    // 2. Delete Class Students
+    document.getElementById('btnConfirmDeleteClass').addEventListener('click', function () {
+        var dept = (document.getElementById('removeClassDept').value || '').trim();
+        var year = document.getElementById('removeClassYear').value;
+
+        if (!dept) {
+            showModalAlert('Please select a Department from the list.', false);
+            return;
+        }
+        if (!year) {
+            showModalAlert('Please select Class Year.', false);
+            return;
+        }
+
+        if (!confirm('Are you sure you want to delete ALL students belonging to ' + dept + ' (Year ' + year + ')? This action cannot be undone.')) {
+            return;
+        }
+
+        var btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Removing class...';
+        hideModalAlert();
+
+        var formData = new FormData();
+        formData.append('__RequestVerificationToken', csrfToken);
+        formData.append('department', dept);
+        formData.append('year', year);
+
+        fetch('@Url.Action("RemoveClass", "Student")', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            btn.disabled = false;
+            btn.innerHTML = '&#128465; Delete Entire Class';
+            if (data.success) {
+                triggerSuccessPopup(data.message);
+            } else {
+                showModalAlert(data.message || 'Could not remove class.', false);
+            }
+        })
+        .catch(function (err) {
+            btn.disabled = false;
+            btn.innerHTML = '&#128465; Delete Entire Class';
+            showModalAlert('Error: ' + err.message, false);
+        });
+    });
+
+    /* ═══════════════════════════════════════════════════════════════ */
+    /* 4-STEP CASCADING SELECTION: Stream -> Department -> Year -> Subject */
+    /* ═══════════════════════════════════════════════════════════════ */
+    var STREAM_DATA = {
+        "Arts": {
+            depts: {
+                "English": [
+                    "English Communication", "British Literature", "Indian English Poetry", 
+                    "Post-Colonial Studies", "Literary Criticism & Theory", "Advanced Linguistics"
+                ],
+                "Marathi": [
+                    "Marathi Sahitya", "Madhyayugin Marathi Kavya", "Bhasha Vidnyan", 
+                    "Marathi Natak & Cinema", "Loksahitya", "Vyavaharik Marathi"
+                ],
+                "Hindi": [
+                    "Hindi Sahitya Ka Itihas", "Kavya Shastra", "Adhunik Hindi Gadya", 
+                    "Natak & Rangmanch", "Prayojanmulak Hindi", "Samkalin Hindi Kavita"
+                ],
+                "History": [
+                    "Ancient Indian History", "Medieval India (Mughals & Marathas)", 
+                    "Modern Indian History & Freedom Struggle", "World History (1914-1992)", 
+                    "Chhatrapati Shivaji Maharaj & His Times", "Historiography & Research Methodology"
+                ],
+                "Geography": [
+                    "Physical Geography (Geomorphology)", "Human & Economic Geography", 
+                    "Geography of India & Maharashtra", "Climatology & Oceanography", 
+                    "Cartography & Map Reading", "GIS & Remote Sensing"
+                ]
+            }
+        },
+        "Commerce": {
+            depts: {
+                "Accountancy & Taxation": [
+                    "Financial Accounting", "Corporate Accounting", "Cost Accounting", 
+                    "Income Tax Law & Practice", "Goods & Services Tax (GST)", "Auditing & Assurance"
+                ],
+                "Marketing": [
+                    "Principles of Marketing", "Consumer Behaviour", "Services Marketing", 
+                    "Advertising & Sales Promotion", "Digital & Social Media Marketing", "International Marketing"
+                ],
+                "Cost & Management Accounting": [
+                    "Cost Concepts & Classifications", "Methods of Costing", 
+                    "Management Accounting & Control", "Budgetary Control & Standard Costing", 
+                    "Marginal Costing & Decision Making", "Strategic Cost Management"
+                ],
+                "Banking & Finance": [
+                    "Banking Law & Practice", "Indian Financial System & RBI", 
+                    "Financial Markets & Instruments", "Credit Management & NPA", 
+                    "Investment Analysis & Portfolio Management", "FinTech & Digital Banking"
+                ],
+                "Business Statistics": [
+                    "Descriptive Statistics & Probability", "Business Mathematics & Matrices", 
+                    "Sampling Distributions & Estimation", "Hypothesis Testing & Chi-Square", 
+                    "Correlation & Linear Regression", "Time Series & Index Numbers"
+                ]
+            }
+        },
+        "Diploma": {
+            depts: {
+                "PG Diploma in Taxation Laws": [
+                    "Direct Taxes & Income Tax Act", "Goods and Services Tax (GST) & Customs", 
+                    "Tax Audit, Procedures & Case Laws", "Book Keeping, Accountancy & Tax Planning"
+                ]
+            }
+        },
+        "Science": {
+            depts: {
+                "Mathematics": [
+                    "Calculus & Differential Equations", "Linear Algebra & Matrices", 
+                    "Real Analysis & Metric Spaces", "Abstract Algebra (Groups & Rings)", 
+                    "Complex Analysis", "Numerical Methods & Differential Calculus"
+                ],
+                "Physics": [
+                    "Mechanics & Properties of Matter", "Electricity, Magnetism & Electrodynamics", 
+                    "Optics & Lasers", "Thermodynamics & Statistical Mechanics", 
+                    "Quantum Mechanics & Atomic Physics", "Nuclear Physics & Electronics"
+                ],
+                "Botany": [
+                    "Plant Diversity (Algae, Fungi, Bryophytes)", "Plant Anatomy & Embryology", 
+                    "Plant Physiology & Biochemistry", "Genetics & Plant Breeding", 
+                    "Ecology & Phytogeography", "Economic Botany & Biotechnology"
+                ],
+                "Zoology": [
+                    "Animal Diversity (Non-Chordates & Chordates)", "Cell Biology & Genetics", 
+                    "Animal Physiology & Endocrinology", "Evolution & Developmental Biology", 
+                    "Applied Zoology (Apiculture, Sericulture)", "Immunology & Molecular Biology"
+                ],
+                "Electronics": [
+                    "Basic Electronics & Semiconductor Devices", "Digital Electronics & Logic Gates", 
+                    "Operational Amplifiers & Linear ICs", "Microprocessors & Microcontrollers (8051/ARM)", 
+                    "Communication Electronics & Signals", "Embedded Systems & IoT"
+                ],
+                "Computer Science": [
+                    "Problem Solving & C/C++ Programming", "Data Structures & Algorithms", 
+                    "Object Oriented Programming (Java/Python)", "Database Management Systems (SQL)", 
+                    "Operating Systems & Computer Networks", "Web Development & Software Engineering"
+                ],
+                "Chemistry": [
+                    "Physical Chemistry (Kinetics, Thermodynamics)", "Inorganic Chemistry & Coordination Compounds", 
+                    "Organic Chemistry (Reaction Mechanisms, Synthesis)", "Analytical Chemistry & Spectroscopy", 
+                    "Polymer Chemistry & Green Synthesis", "Biochemistry & Industrial Chemistry"
+                ],
+                "Food Technology": [
+                    "Food Chemistry & Composition", "Food Microbiology & Safety", 
+                    "Principles of Food Processing & Preservation", "Post-Harvest Technology", 
+                    "Dairy & Beverage Processing", "Food Packaging & Quality Assurance"
+                ],
+                "Data Science": [
+                    "Python for Data Science", "Data Wrangling & Visualization",
+                    "Statistical Foundations & Linear Algebra", "Machine Learning & Predictive Modeling",
+                    "Big Data Frameworks", "Deep Learning & Neural Networks"
+                ]
+            }
+        },
+        "PHD": {
+            depts: {
+                "Botany": ["Research Methodology in Plant Sciences", "Advanced Botanical Literature"],
+                "Economics": ["Advanced Econometric Techniques", "Development Economics Research"],
+                "Hindi": ["Hindi Sahitya Shodh Pravidhi", "Bhasha Aur Sahitya Shodh"],
+                "Physics": ["Advanced Condensed Matter Physics", "Experimental Physics Research"],
+                "Marathi": ["Marathi Bhasha Va Sahitya Shodh", "Vangmayeen Chalwali Shodh"],
+                "Statistics": ["Advanced Statistical Inference", "Multivariate Data Modeling"],
+                "Commerce & Management": ["Business Research Methods", "Strategic Corporate Research"],
+                "Microbiology": ["Applied Molecular Microbiology", "Bioinformatics & Microbial Genomics"]
+            }
+        },
+        "Vocational": {
+            depts: {
+                "Food Processing & Post Harvest Technology": [
+                    "Post-Harvest Handling & Storage", "Fruits & Vegetables Processing", 
+                    "Grain & Bakery Technology", "Food Safety Standards & FSSAI"
+                ],
+                "Journalism & Mass Communication": [
+                    "Reporting & News Editing", "Electronic & Broadcast Media", 
+                    "Photojournalism & Video Production", "Media Laws & Ethics"
+                ],
+                "Retail Management": [
+                    "Retail Store Operations", "Merchandise Buying & Visual Merchandising", 
+                    "Customer Relationship Management (CRM)", "Supply Chain & Logistics"
+                ],
+                "Dairy Technology": [
+                    "Milk Processing & Plant Design", "Cheese & Fermented Milk Products", 
+                    "Dairy Microbiology & Quality Control", "By-products Utilization"
+                ],
+                "E-Commerce & Digital Marketing": [
+                    "E-Commerce Architecture & Portals", "Search Engine Optimization (SEO & SEM)", 
+                    "Content Marketing & Copywriting", "Web Analytics & Conversion Optimization"
+                ],
+                "Media Studies": [
+                    "Digital Media Aesthetics", "Visual Communication & Design",
+                    "Audio-Visual Storytelling", "Audience Research & Media Analytics"
+                ]
+            }
+        },
+        "Professional": {
+            depts: {
+                "BBA": [
+                    "Business Organization & Environment", "Financial & Cost Accounting", 
+                    "Marketing & Human Resource Strategy", "Business Law & Taxation"
+                ],
+                "BBA(CA)": [
+                    "Modern Programming Concepts", "Relational Database Management", 
+                    "Web Design & E-Commerce Technologies", "Enterprise Resource Planning (ERP)"
+                ],
+                "BCA": [
+                    "Structured Programming & C++", "Data Structures & File Organization", 
+                    "Java & Python Enterprise Systems", "Software Engineering & Cloud Services"
+                ]
+            }
+        },
+        "Others": {
+            depts: {
+                "Bachelor of Library & Info Science": [
+                    "Library Organization, Laws & Management", "Information Sources, Systems & Services", 
+                    "Knowledge Organization (Cataloguing & Classification)", "Library Automation & Digital Libraries"
+                ],
+                "Master of Library & Info Science": [
+                    "Advanced Information Systems", "Digital Libraries & Institutional Repositories",
+                    "Information Retrieval Theory", "Research Methods in Library Science"
+                ]
+            }
+        }
+    };
+
+    var streamSelect = document.getElementById('streamSelect');
+    var deptSelect   = document.getElementById('deptSelect');
+    var yearSelect   = document.getElementById('Year');
+    var finalDeptInput = document.getElementById('FinalDepartmentInput');
+    var summaryBox   = document.getElementById('selectionSummaryBox');
+    var summaryText  = document.getElementById('summaryText');
+    var removeClassDept = document.getElementById('removeClassDept');
+
+    // Populate Modal delete class dropdown
+    if (removeClassDept) {
+        removeClassDept.innerHTML = '<option value="">-- Select Department --</option>';
+        Object.keys(STREAM_DATA).forEach(function (sKey) {
+            var grp = document.createElement('optgroup');
+            grp.label = sKey + " Stream";
+            var depts = STREAM_DATA[sKey].depts;
+            Object.keys(depts).forEach(function (dName) {
+                var mOpt = document.createElement('option');
+                mOpt.value = sKey + " - " + dName;
+                mOpt.textContent = sKey + " - " + dName;
+                grp.appendChild(mOpt);
+            });
+            removeClassDept.appendChild(grp);
+        });
+    }
+
+    // Helper to update the final composite department string for EF Model
+    function updateFinalDepartment() {
+        var s = streamSelect.value;
+        var d = deptSelect.value;
+        var y = yearSelect.value;
+
+        if (s && d) {
+            finalDeptInput.value = s + " - " + d;
+        } else {
+            finalDeptInput.value = "";
+        }
+
+        if (s && d && y) {
+            summaryText.textContent = s + " > " + d + " > Year " + y;
+            summaryBox.style.display = 'block';
+        } else {
+            summaryBox.style.display = 'none';
+        }
+    }
+
+    // ── 1. STREAM CHANGE -> Populates DEPARTMENTS ──
+    streamSelect.addEventListener('change', function () {
+        var stream = this.value;
+
+        // Reset lower cascade levels
+        deptSelect.innerHTML = '<option value="">-- Select Department --</option>';
+        yearSelect.value = '';
+        yearSelect.disabled = true;
+        deptSelect.disabled = true;
+
+        if (!stream || !STREAM_DATA[stream]) {
+            deptSelect.innerHTML = '<option value="">-- Choose Stream First --</option>';
+            updateFinalDepartment();
+            return;
+        }
+
+        var deptObj = STREAM_DATA[stream].depts;
+        Object.keys(deptObj).forEach(function (deptName) {
+            var opt = document.createElement('option');
+            opt.value = deptName;
+            opt.textContent = deptName;
+            deptSelect.appendChild(opt);
+        });
+
+        deptSelect.disabled = false;
+        updateFinalDepartment();
+    });
+
+    // ── 2. DEPARTMENT CHANGE -> Enables YEAR ──
+    deptSelect.addEventListener('change', function () {
+        var dept = this.value;
+        yearSelect.value = '';
+
+        if (dept) {
+            yearSelect.disabled = false;
+        } else {
+            yearSelect.disabled = true;
+        }
+        updateFinalDepartment();
+    });
+
+    // ── 3. YEAR CHANGE -> Updates Summary ──
+    yearSelect.addEventListener('change', function () {
+        updateFinalDepartment();
+    });
+
+    // Form submit guard
+    var regForm = document.getElementById('registerForm');
+    if (regForm) {
+        regForm.addEventListener('submit', function (e) {
+            updateFinalDepartment();
+            if (!finalDeptInput.value) {
+                alert('Please complete all 3 academic steps: Stream, Department, and Year.');
+                e.preventDefault();
+                return false;
+            }
+        });
+    }
+
+})();
+</script>
+}
